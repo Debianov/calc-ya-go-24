@@ -1,17 +1,89 @@
 package main
 
-import "net/http"
+import (
+	"encoding/json"
+	"github.com/Debianov/calc-ya-go-24/pkg"
+	"io"
+	"net/http"
+)
 
 type Config struct {
 }
 
-func calcHander(w http.ResponseWriter, r *http.Request) {
+type Request struct {
+	Expression string `json:"expression"`
+}
 
+type OKResponse struct {
+	Result float64 `json:"result"`
+}
+
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
+
+func expressionValidErrorHandler(w http.ResponseWriter) {
+	var (
+		buf         []byte
+		err         error
+		errResponse = &ErrorResponse{Error: "Expression is not valid"}
+	)
+	buf, err = json.Marshal(errResponse)
+	if err != nil {
+		panic(err)
+	}
+	w.WriteHeader(422)
+	_, err = w.Write(buf)
+	if err != nil {
+		panic(err)
+	}
+	return
+}
+
+func calcHandler(w http.ResponseWriter, r *http.Request) {
+	var (
+		reader        io.ReadCloser
+		buf           []byte
+		err           error
+		requestStruct *Request
+	)
+	if r.Method != http.MethodPost {
+		expressionValidErrorHandler(w)
+	}
+	reader, err = r.GetBody()
+	if err != nil {
+		panic(err)
+	}
+	_, err = reader.Read(buf)
+	if err != nil {
+		panic(err)
+	}
+	err = json.Unmarshal(buf, requestStruct)
+	if err != nil {
+		panic(err)
+	}
+	var (
+		result float64
+	)
+	result, err = pkg.Calc(requestStruct.Expression)
+	if err != nil {
+		expressionValidErrorHandler(w)
+	}
+	var responseStruct = &OKResponse{Result: result}
+	buf, err = json.Marshal(responseStruct)
+	if err != nil {
+		panic(err)
+	}
+	_, err = w.Write(buf)
+	if err != nil {
+		panic(err)
+	}
+	w.WriteHeader(200)
 }
 
 func main() {
 	var err error
-	http.HandleFunc("/api/v1/calculate", calcHander)
+	http.HandleFunc("/api/v1/calculate", calcHandler)
 	s := &http.Server{Addr: "127.0.0.1:8000"}
 	err = s.ListenAndServe()
 	if err != nil {
