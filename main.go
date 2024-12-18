@@ -67,7 +67,7 @@ func calcHandler(w http.ResponseWriter, r *http.Request) {
 		requestStruct RequestJson
 	)
 	if r.Method != http.MethodPost {
-		expressionValidErrorHandler(w)
+		return
 	}
 	reader = r.Body
 	buf, err = io.ReadAll(reader)
