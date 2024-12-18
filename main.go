@@ -84,6 +84,7 @@ func calcHandler(w http.ResponseWriter, r *http.Request) {
 	result, err = pkg.Calc(requestStruct.Expression)
 	if err != nil {
 		expressionValidErrorHandler(w)
+		return
 	}
 	var responseStruct = &OKJson{Result: result}
 	buf, err = responseStruct.Marshal()
