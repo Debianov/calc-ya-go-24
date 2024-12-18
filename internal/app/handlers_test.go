@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"bytes"
@@ -74,7 +74,7 @@ func RunThroughCalcHandler[K, V JsonPayload](t *testing.T, requestsToSend []K, e
 		)
 		reader = bytes.NewReader(testCase.toOutput)
 		req = httptest.NewRequest("POST", "/api/v1/calculate", reader)
-		calcHandler(w, req)
+		CalcHandler(w, req)
 		if bytes.Compare(testCase.expected, w.Body.Bytes()) != 0 {
 			t.Fatalf(compareErrorTemplate+" "+"(индекс случая — %d, %s)", testCase.expected, w.Body.Bytes(), ind, testCase)
 		}
