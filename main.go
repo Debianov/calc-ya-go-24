@@ -10,16 +10,35 @@ import (
 type Config struct {
 }
 
+type JsonPayload interface {
+	Marshal() (result []byte, err error)
+}
+
 type RequestJson struct {
 	Expression string `json:"expression"`
+}
+
+func (r RequestJson) Marshal() (result []byte, err error) {
+	result, err = json.Marshal(&r)
+	return
 }
 
 type OKJson struct {
 	Result float64 `json:"result"`
 }
 
+func (o OKJson) Marshal() (result []byte, err error) {
+	result, err = json.Marshal(&o)
+	return
+}
+
 type ErrorJson struct {
 	Error string `json:"error"`
+}
+
+func (e ErrorJson) Marshal() (result []byte, err error) {
+	result, err = json.Marshal(&e)
+	return
 }
 
 func expressionValidErrorHandler(w http.ResponseWriter) {
@@ -28,7 +47,7 @@ func expressionValidErrorHandler(w http.ResponseWriter) {
 		err         error
 		errResponse = &ErrorJson{Error: "Expression is not valid"}
 	)
-	buf, err = json.Marshal(errResponse)
+	buf, err = errResponse.Marshal()
 	if err != nil {
 		panic(err)
 	}
@@ -67,7 +86,7 @@ func calcHandler(w http.ResponseWriter, r *http.Request) {
 		expressionValidErrorHandler(w)
 	}
 	var responseStruct = &OKJson{Result: result}
-	buf, err = json.Marshal(responseStruct)
+	buf, err = responseStruct.Marshal()
 	if err != nil {
 		panic(err)
 	}
