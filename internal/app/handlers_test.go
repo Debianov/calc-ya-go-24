@@ -6,10 +6,12 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 )
 
-var compareErrorTemplate = "ожидается %s error, получен %s error"
+var compareTemplate = "ожидается %s, получен %s"
+var caseDebugInfoTemplate = "(индекс случая — %d, %s)"
 
 func TestErrorHandler(t *testing.T) {
 	var (
@@ -29,7 +31,7 @@ func TestErrorHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 	if currentErrResponse.Error != expectedErrResponse.Error {
-		t.Fatalf(compareErrorTemplate, expectedErrResponse.Error, expectedErrResponse.Error)
+		t.Fatalf(compareTemplate, expectedErrResponse.Error, expectedErrResponse.Error)
 	}
 }
 
@@ -38,26 +40,26 @@ type byteCase struct {
 	expected []byte
 }
 
-func TestGoodCalcHandler(t *testing.T) {
+func Test200CalcHandler(t *testing.T) {
 	var (
 		requestsToTest = []RequestJson{{"2+2*4"}, {"4*2+3"}, {"8+2/3"},
 			{"8+3/4*(110+43)-54"}}
 		expectedResponses = []OKJson{{10}, {11}, {8.666666666666666}, {68.75}}
 	)
-	RunThroughCalcHandler(t, requestsToTest, expectedResponses)
+	RunThroughCalcHandler(t, requestsToTest, expectedResponses, 200)
 }
 
-func TestBadCalcHandler(t *testing.T) {
+func Test422CalcHandler(t *testing.T) {
 	var (
 		requestsToTest = []RequestJson{{"2++2*4"}, {"4*(2+3"}, {"8+2/3)"},
 			{"4*()2+3"}}
 		expectedResponses = []ErrorJson{{"Expression is not valid"}, {"Expression is not valid"},
 			{"Expression is not valid"}, {"Expression is not valid"}}
 	)
-	RunThroughCalcHandler(t, requestsToTest, expectedResponses)
+	RunThroughCalcHandler(t, requestsToTest, expectedResponses, 422)
 }
 
-func RunThroughCalcHandler[K, V JsonPayload](t *testing.T, requestsToSend []K, expectedResponses []V) {
+func RunThroughCalcHandler[K, V JsonPayload](t *testing.T, requestsToSend []K, expectedResponses []V, expectedHttpCode int) {
 	var (
 		cases []byteCase
 		err   error
@@ -76,7 +78,11 @@ func RunThroughCalcHandler[K, V JsonPayload](t *testing.T, requestsToSend []K, e
 		req = httptest.NewRequest("POST", "/api/v1/calculate", reader)
 		CalcHandler(w, req)
 		if bytes.Compare(testCase.expected, w.Body.Bytes()) != 0 {
-			t.Fatalf(compareErrorTemplate+" "+"(индекс случая — %d, %s)", testCase.expected, w.Body.Bytes(), ind, testCase)
+			t.Fatalf(compareTemplate+" "+caseDebugInfoTemplate, testCase.expected, w.Body.Bytes(), ind, testCase)
+		}
+		if w.Code != expectedHttpCode {
+			t.Fatalf(compareTemplate+" "+caseDebugInfoTemplate, strconv.Itoa(expectedHttpCode), strconv.Itoa(w.Code),
+				ind, testCase)
 		}
 	}
 }
