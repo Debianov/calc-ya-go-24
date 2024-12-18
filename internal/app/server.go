@@ -6,8 +6,10 @@ import (
 )
 
 func StartServer() (err error) {
-	http.HandleFunc("/api/v1/calculate", CalcHandler)
-	s := internal.GetDefaultServer()
+	var mux = http.NewServeMux()
+	mux.HandleFunc("/api/v1/calculate", CalcHandler)
+	var handler = PanicMiddleware(mux)
+	s := internal.GetDefaultServer(handler)
 	err = s.ListenAndServe()
 	return
 }
