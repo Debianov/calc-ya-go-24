@@ -10,15 +10,15 @@ import (
 type Config struct {
 }
 
-type Request struct {
+type RequestJson struct {
 	Expression string `json:"expression"`
 }
 
-type OKResponse struct {
+type OKJson struct {
 	Result float64 `json:"result"`
 }
 
-type ErrorResponse struct {
+type ErrorJson struct {
 	Error string `json:"error"`
 }
 
@@ -26,7 +26,7 @@ func expressionValidErrorHandler(w http.ResponseWriter) {
 	var (
 		buf         []byte
 		err         error
-		errResponse = &ErrorResponse{Error: "Expression is not valid"}
+		errResponse = &ErrorJson{Error: "Expression is not valid"}
 	)
 	buf, err = json.Marshal(errResponse)
 	if err != nil {
@@ -45,20 +45,17 @@ func calcHandler(w http.ResponseWriter, r *http.Request) {
 		reader        io.ReadCloser
 		buf           []byte
 		err           error
-		requestStruct *Request
+		requestStruct RequestJson
 	)
 	if r.Method != http.MethodPost {
 		expressionValidErrorHandler(w)
 	}
-	reader, err = r.GetBody()
+	reader = r.Body
+	buf, err = io.ReadAll(reader)
 	if err != nil {
 		panic(err)
 	}
-	_, err = reader.Read(buf)
-	if err != nil {
-		panic(err)
-	}
-	err = json.Unmarshal(buf, requestStruct)
+	err = json.Unmarshal(buf, &requestStruct)
 	if err != nil {
 		panic(err)
 	}
@@ -69,7 +66,7 @@ func calcHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		expressionValidErrorHandler(w)
 	}
-	var responseStruct = &OKResponse{Result: result}
+	var responseStruct = &OKJson{Result: result}
 	buf, err = json.Marshal(responseStruct)
 	if err != nil {
 		panic(err)
