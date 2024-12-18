@@ -9,20 +9,22 @@ import (
 
 func TestErrorHandler(t *testing.T) {
 	var (
-		w = httptest.NewRecorder()
+		w                   = httptest.NewRecorder()
 		expectedErrResponse = &ErrorResponse{Error: "Expression is not valid"}
-		currentErrResponse *ErrorResponse
-		buf *bytes.Buffer
-		err error
+		currentErrResponse  ErrorResponse
+		buf                 *bytes.Buffer
+		err                 error
 	)
 	expressionValidErrorHandler(w)
 	if w.Code != 422 {
-		t.Errorf("ожидается код 422, получен %d", w.Code)
+		t.Fatalf("ожидается код 422, получен %d", w.Code)
 	}
 	buf = w.Body
-	, err = json.Unmarshal(, currentErrResponse)
-	if currentErrResponse.Error != expectedErrResponse.Error {
-
+	err = json.Unmarshal(buf.Bytes(), &currentErrResponse)
+	if err != nil {
+		t.Fatal(err)
 	}
-
+	if currentErrResponse.Error != expectedErrResponse.Error {
+		t.Fatalf("ожидается %s error, получен %s error", expectedErrResponse.Error, expectedErrResponse.Error)
+	}
 }
