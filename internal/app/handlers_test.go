@@ -105,3 +105,32 @@ func TestExpressionValidErrorHandler(t *testing.T) {
 		t.Fatalf(compareTemplate, expectedErrResponse.Error, expectedErrResponse.Error)
 	}
 }
+
+func TestBadPanicMiddleware(t *testing.T) {
+	var mux = http.NewServeMux()
+	mux.HandleFunc("/api/v1/calculate", mockHandlerWithPanic)
+	middlewareHandler := PanicMiddleware(mux)
+	var (
+		w                   = httptest.NewRecorder()
+		mockReader          = bytes.NewReader(nil)
+		req                 = httptest.NewRequest("GET", "/api/v1/calculate", mockReader)
+		expectedErrResponse = &ErrorJson{Error: "Internal server error"}
+		gottenErrResponse   ErrorJson
+		err                 error
+	)
+	middlewareHandler.ServeHTTP(w, req)
+	err = json.Unmarshal(w.Body.Bytes(), &gottenErrResponse)
+	if err != nil {
+		t.Error(err)
+	}
+	if expectedErrResponse.Error != gottenErrResponse.Error {
+		t.Errorf(compareTemplate, expectedErrResponse.Error, gottenErrResponse.Error)
+	}
+	if w.Code != 500 {
+		t.Errorf(compareTemplate, "500", strconv.Itoa(w.Code))
+	}
+}
+
+func mockHandlerWithPanic(w http.ResponseWriter, r *http.Request) {
+	panic(errors.New("ААААААА!!!!"))
+}

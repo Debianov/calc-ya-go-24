@@ -66,12 +66,12 @@ func expressionValidErrorHandler(w http.ResponseWriter) {
 
 func PanicMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := recover(); err != nil {
-			internalServerErrorHandler(w)
-			panic(err)
-		} else {
-			next.ServeHTTP(w, r)
-		}
+		defer func() {
+			if err := recover(); err != nil {
+				internalServerErrorHandler(w)
+			}
+		}()
+		next.ServeHTTP(w, r)
 	})
 }
 
