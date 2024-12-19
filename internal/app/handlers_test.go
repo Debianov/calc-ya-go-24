@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/Debianov/calc-ya-go-24/pkg"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -12,33 +13,6 @@ import (
 
 var compareTemplate = "ожидается %s, получен %s"
 var caseDebugInfoTemplate = "(индекс случая — %d, %s)"
-
-func TestErrorHandler(t *testing.T) {
-	var (
-		w                   = httptest.NewRecorder()
-		expectedErrResponse = &ErrorJson{Error: "Expression is not valid"}
-		currentErrResponse  ErrorJson
-		buf                 *bytes.Buffer
-		err                 error
-	)
-	expressionValidErrorHandler(w)
-	if w.Code != 422 {
-		t.Fatalf("ожидается код 422, получен %d", w.Code)
-	}
-	buf = w.Body
-	err = json.Unmarshal(buf.Bytes(), &currentErrResponse)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if currentErrResponse.Error != expectedErrResponse.Error {
-		t.Fatalf(compareTemplate, expectedErrResponse.Error, expectedErrResponse.Error)
-	}
-}
-
-type byteCase struct {
-	toOutput []byte
-	expected []byte
-}
 
 func Test200CalcHandler(t *testing.T) {
 	var (
@@ -61,7 +35,7 @@ func Test422CalcHandler(t *testing.T) {
 
 func RunThroughCalcHandler[K, V JsonPayload](t *testing.T, requestsToSend []K, expectedResponses []V, expectedHttpCode int) {
 	var (
-		cases []byteCase
+		cases []pkg.ByteCase
 		err   error
 	)
 	cases, err = convertToByteCases(requestsToSend, expectedResponses)
@@ -74,11 +48,11 @@ func RunThroughCalcHandler[K, V JsonPayload](t *testing.T, requestsToSend []K, e
 			reader *bytes.Reader
 			req    *http.Request
 		)
-		reader = bytes.NewReader(testCase.toOutput)
+		reader = bytes.NewReader(testCase.ToOutput)
 		req = httptest.NewRequest("POST", "/api/v1/calculate", reader)
 		CalcHandler(w, req)
-		if bytes.Compare(testCase.expected, w.Body.Bytes()) != 0 {
-			t.Fatalf(compareTemplate+" "+caseDebugInfoTemplate, testCase.expected, w.Body.Bytes(), ind, testCase)
+		if bytes.Compare(testCase.Expected, w.Body.Bytes()) != 0 {
+			t.Fatalf(compareTemplate+" "+caseDebugInfoTemplate, testCase.Expected, w.Body.Bytes(), ind, testCase)
 		}
 		if w.Code != expectedHttpCode {
 			t.Fatalf(compareTemplate+" "+caseDebugInfoTemplate, strconv.Itoa(expectedHttpCode), strconv.Itoa(w.Code),
@@ -87,7 +61,7 @@ func RunThroughCalcHandler[K, V JsonPayload](t *testing.T, requestsToSend []K, e
 	}
 }
 
-func convertToByteCases[K, V JsonPayload](reqs []K, resps []V) (result []byteCase, err error) {
+func convertToByteCases[K, V JsonPayload](reqs []K, resps []V) (result []pkg.ByteCase, err error) {
 	if len(reqs) != len(resps) {
 		err = errors.New("reqs и resps должны быть одной длины")
 		return
@@ -105,7 +79,29 @@ func convertToByteCases[K, V JsonPayload](reqs []K, resps []V) (result []byteCas
 		if err != nil {
 			return
 		}
-		result = append(result, byteCase{reqBuf, respBuf})
+		result = append(result, pkg.ByteCase{ToOutput: reqBuf, Expected: respBuf})
 	}
 	return
+}
+
+func TestExpressionValidErrorHandler(t *testing.T) {
+	var (
+		w                   = httptest.NewRecorder()
+		expectedErrResponse = &ErrorJson{Error: "Expression is not valid"}
+		currentErrResponse  ErrorJson
+		buf                 *bytes.Buffer
+		err                 error
+	)
+	expressionValidErrorHandler(w)
+	if w.Code != 422 {
+		t.Fatalf("ожидается код 422, получен %d", w.Code)
+	}
+	buf = w.Body
+	err = json.Unmarshal(buf.Bytes(), &currentErrResponse)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if currentErrResponse.Error != expectedErrResponse.Error {
+		t.Fatalf(compareTemplate, expectedErrResponse.Error, expectedErrResponse.Error)
+	}
 }
