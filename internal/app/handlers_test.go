@@ -20,7 +20,7 @@ func Test200CalcHandler(t *testing.T) {
 			{"8+3/4*(110+43)-54"}, {""}, {"12"}}
 		expectedResponses = []OKJson{{10}, {11}, {8.666666666666666}, {68.75}, {0}, {12}}
 	)
-	RunThroughCalcHandler(t, requestsToTest, expectedResponses, 200)
+	RunTestThroughHandler(CalcHandler, t, requestsToTest, expectedResponses, 200)
 }
 
 func Test422CalcHandler(t *testing.T) {
@@ -30,10 +30,11 @@ func Test422CalcHandler(t *testing.T) {
 		expectedResponses = []ErrorJson{{"Expression is not valid"}, {"Expression is not valid"},
 			{"Expression is not valid"}, {"Expression is not valid"}}
 	)
-	RunThroughCalcHandler(t, requestsToTest, expectedResponses, 422)
+	RunTestThroughHandler(CalcHandler, t, requestsToTest, expectedResponses, 422)
 }
 
-func RunThroughCalcHandler[K, V JsonPayload](t *testing.T, requestsToSend []K, expectedResponses []V, expectedHttpCode int) {
+func RunTestThroughHandler[K, V JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
+	requestsToSend []K, expectedResponses []V, expectedHttpCode int) {
 	var (
 		cases []pkg.ByteCase
 		err   error
@@ -50,7 +51,7 @@ func RunThroughCalcHandler[K, V JsonPayload](t *testing.T, requestsToSend []K, e
 		)
 		reader = bytes.NewReader(testCase.ToOutput)
 		req = httptest.NewRequest("POST", "/api/v1/calculate", reader)
-		CalcHandler(w, req)
+		handler(w, req)
 		if expectedHttpCode != w.Code {
 			t.Errorf(compareTemplate+" "+caseDebugInfoTemplate, strconv.Itoa(expectedHttpCode), strconv.Itoa(w.Code),
 				ind, testCase)
@@ -93,13 +94,13 @@ func TestExpressionValidErrorHandler(t *testing.T) {
 		err                 error
 	)
 	expressionValidErrorHandler(w)
-	if w.Code != 422 {
-		t.Errorf("ожидается код 422, получен %d", w.Code)
-	}
 	buf = w.Body
 	err = json.Unmarshal(buf.Bytes(), &currentErrResponse)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if w.Code != 422 {
+		t.Errorf("ожидается код 422, получен %d", w.Code)
 	}
 	if expectedErrResponse.Error != currentErrResponse.Error {
 		t.Errorf(compareTemplate, expectedErrResponse.Error, expectedErrResponse.Error)
@@ -121,7 +122,7 @@ func TestBadPanicMiddleware(t *testing.T) {
 	middlewareHandler.ServeHTTP(w, req)
 	err = json.Unmarshal(w.Body.Bytes(), &gottenErrResponse)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if 500 != w.Code {
 		t.Errorf(compareTemplate, "500", strconv.Itoa(w.Code))
@@ -165,7 +166,7 @@ func TestInternalServerErrorHandler(t *testing.T) {
 	internalServerErrorHandler(w)
 	err = json.Unmarshal(w.Body.Bytes(), &gottenErrResponse)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if 500 != w.Code {
 		t.Errorf(compareTemplate, "500", strconv.Itoa(w.Code))
@@ -173,4 +174,48 @@ func TestInternalServerErrorHandler(t *testing.T) {
 	if expectedErrResponse.Error != gottenErrResponse.Error {
 		t.Errorf(compareTemplate, expectedErrResponse.Error, gottenErrResponse.Error)
 	}
+}
+
+func TestGoodGetHandler(t *testing.T) {
+	var (
+		handler          = getHandler()
+		w                = httptest.NewRecorder()
+		reqJson          = RequestJson{Expression: "23+21/3*123"}
+		reqJsonInByte    []byte
+		reqToSend        *http.Request
+		expectedResponse = OKJson{Result: 884}
+		gottenResponse   OKJson
+		err              error
+	)
+	reqJsonInByte, err = json.Marshal(reqJson)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reqToSend, err = http.NewRequest("POST", "/api/v1/calculate", bytes.NewReader(reqJsonInByte))
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler.ServeHTTP(w, reqToSend)
+	err = json.Unmarshal(w.Body.Bytes(), &gottenResponse)
+	if expectedResponse.Result != gottenResponse.Result {
+		t.Errorf(compareTemplate, strconv.Itoa(int(expectedResponse.Result)), strconv.Itoa(int(gottenResponse.Result)))
+	}
+	if 200 != w.Code {
+		t.Errorf(compareTemplate, "200", strconv.Itoa(w.Code))
+	}
+}
+
+/*
+TestBadGetHandler тестирует, что, в общем, цепочка handler-ов в getHandler функции построена верно.
+*/
+func TestBadGetHandler(t *testing.T) {
+	var (
+		requestsToTest    = []JsonPayload{RequestJson{"232+)"}}
+		expectedResponses = []ErrorJson{{Error: "Expression is not valid"}}
+	)
+	handler := getHandler()
+	RunTestThroughHandler(handler.ServeHTTP, t, requestsToTest, expectedResponses, 422)
+	requestsToTest = []JsonPayload{RequestNilJson{Expression: nil}}
+	expectedResponses = []ErrorJson{{Error: "Internal server error"}}
+	RunTestThroughHandler(handler.ServeHTTP, t, requestsToTest, expectedResponses, 500)
 }
