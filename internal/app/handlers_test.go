@@ -17,8 +17,8 @@ var caseDebugInfoTemplate = "(индекс случая — %d, %s)"
 func Test200CalcHandler(t *testing.T) {
 	var (
 		requestsToTest = []RequestJson{{"2+2*4"}, {"4*2+3"}, {"8+2/3"},
-			{"8+3/4*(110+43)-54"}}
-		expectedResponses = []OKJson{{10}, {11}, {8.666666666666666}, {68.75}}
+			{"8+3/4*(110+43)-54"}, {""}, {"12"}}
+		expectedResponses = []OKJson{{10}, {11}, {8.666666666666666}, {68.75}, {0}, {12}}
 	)
 	RunThroughCalcHandler(t, requestsToTest, expectedResponses, 200)
 }
@@ -51,12 +51,12 @@ func RunThroughCalcHandler[K, V JsonPayload](t *testing.T, requestsToSend []K, e
 		reader = bytes.NewReader(testCase.ToOutput)
 		req = httptest.NewRequest("POST", "/api/v1/calculate", reader)
 		CalcHandler(w, req)
-		if bytes.Compare(testCase.Expected, w.Body.Bytes()) != 0 {
-			t.Fatalf(compareTemplate+" "+caseDebugInfoTemplate, testCase.Expected, w.Body.Bytes(), ind, testCase)
-		}
 		if expectedHttpCode != w.Code {
-			t.Fatalf(compareTemplate+" "+caseDebugInfoTemplate, strconv.Itoa(expectedHttpCode), strconv.Itoa(w.Code),
+			t.Errorf(compareTemplate+" "+caseDebugInfoTemplate, strconv.Itoa(expectedHttpCode), strconv.Itoa(w.Code),
 				ind, testCase)
+		}
+		if bytes.Compare(testCase.Expected, w.Body.Bytes()) != 0 {
+			t.Errorf(compareTemplate+" "+caseDebugInfoTemplate, testCase.Expected, w.Body.Bytes(), ind, testCase)
 		}
 	}
 }
@@ -94,7 +94,7 @@ func TestExpressionValidErrorHandler(t *testing.T) {
 	)
 	expressionValidErrorHandler(w)
 	if w.Code != 422 {
-		t.Fatalf("ожидается код 422, получен %d", w.Code)
+		t.Errorf("ожидается код 422, получен %d", w.Code)
 	}
 	buf = w.Body
 	err = json.Unmarshal(buf.Bytes(), &currentErrResponse)
@@ -102,7 +102,7 @@ func TestExpressionValidErrorHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 	if expectedErrResponse.Error != currentErrResponse.Error {
-		t.Fatalf(compareTemplate, expectedErrResponse.Error, expectedErrResponse.Error)
+		t.Errorf(compareTemplate, expectedErrResponse.Error, expectedErrResponse.Error)
 	}
 }
 
@@ -123,11 +123,11 @@ func TestBadPanicMiddleware(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if expectedErrResponse.Error != gottenErrResponse.Error {
-		t.Errorf(compareTemplate, expectedErrResponse.Error, gottenErrResponse.Error)
-	}
 	if 500 != w.Code {
 		t.Errorf(compareTemplate, "500", strconv.Itoa(w.Code))
+	}
+	if expectedErrResponse.Error != gottenErrResponse.Error {
+		t.Errorf(compareTemplate, expectedErrResponse.Error, gottenErrResponse.Error)
 	}
 }
 
@@ -167,10 +167,10 @@ func TestInternalServerErrorHandler(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if expectedErrResponse.Error != gottenErrResponse.Error {
-		t.Errorf(compareTemplate, expectedErrResponse.Error, gottenErrResponse.Error)
-	}
 	if 500 != w.Code {
 		t.Errorf(compareTemplate, "500", strconv.Itoa(w.Code))
+	}
+	if expectedErrResponse.Error != gottenErrResponse.Error {
+		t.Errorf(compareTemplate, expectedErrResponse.Error, gottenErrResponse.Error)
 	}
 }
