@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/Debianov/calc-ya-go-24/pkg"
 	"io"
+	"log"
 	"net/http"
 )
 
@@ -20,11 +21,11 @@ func CalcHandler(w http.ResponseWriter, r *http.Request) {
 	reader = r.Body
 	buf, err = io.ReadAll(reader)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	err = json.Unmarshal(buf, &requestStruct)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	var (
 		result float64
@@ -37,11 +38,11 @@ func CalcHandler(w http.ResponseWriter, r *http.Request) {
 	var responseStruct = &OKJson{Result: result}
 	buf, err = responseStruct.Marshal()
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	_, err = w.Write(buf)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	w.WriteHeader(200)
 }
@@ -54,12 +55,13 @@ func expressionValidErrorHandler(w http.ResponseWriter) {
 	)
 	buf, err = errResponse.Marshal()
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	w.WriteHeader(422)
+	log.Printf("response %s, status code: 422", w)
 	_, err = w.Write(buf)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	return
 }
@@ -69,6 +71,7 @@ func PanicMiddleware(next http.Handler) http.Handler {
 		defer func() {
 			if err := recover(); err != nil {
 				internalServerErrorHandler(w)
+				log.Printf("response %s, status code: 500", w)
 			}
 		}()
 		next.ServeHTTP(w, r)
@@ -83,12 +86,12 @@ func internalServerErrorHandler(w http.ResponseWriter) {
 	)
 	buf, err = errResponse.Marshal()
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	w.WriteHeader(500)
 	_, err = w.Write(buf)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	return
 }
