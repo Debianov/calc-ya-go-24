@@ -54,7 +54,7 @@ func RunThroughCalcHandler[K, V JsonPayload](t *testing.T, requestsToSend []K, e
 		if bytes.Compare(testCase.Expected, w.Body.Bytes()) != 0 {
 			t.Fatalf(compareTemplate+" "+caseDebugInfoTemplate, testCase.Expected, w.Body.Bytes(), ind, testCase)
 		}
-		if w.Code != expectedHttpCode {
+		if expectedHttpCode != w.Code {
 			t.Fatalf(compareTemplate+" "+caseDebugInfoTemplate, strconv.Itoa(expectedHttpCode), strconv.Itoa(w.Code),
 				ind, testCase)
 		}
@@ -101,7 +101,7 @@ func TestExpressionValidErrorHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if currentErrResponse.Error != expectedErrResponse.Error {
+	if expectedErrResponse.Error != currentErrResponse.Error {
 		t.Fatalf(compareTemplate, expectedErrResponse.Error, expectedErrResponse.Error)
 	}
 }
@@ -126,11 +126,51 @@ func TestBadPanicMiddleware(t *testing.T) {
 	if expectedErrResponse.Error != gottenErrResponse.Error {
 		t.Errorf(compareTemplate, expectedErrResponse.Error, gottenErrResponse.Error)
 	}
-	if w.Code != 500 {
+	if 500 != w.Code {
 		t.Errorf(compareTemplate, "500", strconv.Itoa(w.Code))
 	}
 }
 
-func mockHandlerWithPanic(w http.ResponseWriter, r *http.Request) {
+func mockHandlerWithPanic(_ http.ResponseWriter, _ *http.Request) {
 	panic(errors.New("ААААААА!!!!"))
+}
+
+func TestGoodPanicMiddleware(t *testing.T) {
+	var mux = http.NewServeMux()
+	mux.HandleFunc("/api/v1/calculate", mockHandlerWithoutPanic)
+	var (
+		middlewareHandler = PanicMiddleware(mux)
+		w                 = httptest.NewRecorder()
+		mockReader        = bytes.NewReader(nil)
+		req               = httptest.NewRequest("POST", "/api/v1/calculate", mockReader)
+	)
+	middlewareHandler.ServeHTTP(w, req)
+	if 200 != w.Code {
+		t.Errorf(compareTemplate, "200", strconv.Itoa(w.Code))
+	}
+}
+
+func mockHandlerWithoutPanic(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(200)
+	return
+}
+
+func TestInternalServerErrorHandler(t *testing.T) {
+	var (
+		w                   = httptest.NewRecorder()
+		expectedErrResponse = &ErrorJson{Error: "Internal server error"}
+		gottenErrResponse   ErrorJson
+		err                 error
+	)
+	internalServerErrorHandler(w)
+	err = json.Unmarshal(w.Body.Bytes(), &gottenErrResponse)
+	if err != nil {
+		t.Error(err)
+	}
+	if expectedErrResponse.Error != gottenErrResponse.Error {
+		t.Errorf(compareTemplate, expectedErrResponse.Error, gottenErrResponse.Error)
+	}
+	if 500 != w.Code {
+		t.Errorf(compareTemplate, "500", strconv.Itoa(w.Code))
+	}
 }
