@@ -6,10 +6,6 @@ import (
 	"strings"
 )
 
-var (
-	mismatchedParentheses = errors.New("mismatched parentheses")
-)
-
 type Stack[T any] struct {
 	buf []T
 }
@@ -33,6 +29,9 @@ func (s *Stack[T]) pop() T {
 }
 
 func Calc(expression string) (float64, error) {
+	if len(expression) == 0 {
+		return 0, nil
+	}
 	tokens := tokenize(expression)
 	postfix, err := translateToPostfix(tokens)
 	if err != nil {
@@ -42,8 +41,10 @@ func Calc(expression string) (float64, error) {
 }
 
 func tokenize(expr string) []string {
-	var tokens []string
-	var currentToken strings.Builder
+	var (
+		tokens       []string
+		currentToken strings.Builder
+	)
 
 	for _, char := range expr {
 		switch char {
@@ -69,17 +70,25 @@ func tokenize(expr string) []string {
 
 func translateToPostfix(tokens []string) ([]string, error) {
 	var (
-		output        []string
-		operators     = Stack[string]{make([]string, 0)}
-		operandCount  int
-		operatorCount int
+		output              []string
+		operators           = Stack[string]{make([]string, 0)}
+		operandCount        int
+		operatorCount       int
+		firstMustBeOperator bool // после любой ) должен идти только оператор. С помощью этого флага мы будем проверять
+		// на наличие этого условия.
 	)
 
 	for _, token := range tokens {
 		if isNumber(token) {
+			if firstMustBeOperator {
+				return nil, invalidExpression
+			}
 			output = append(output, token)
 			operandCount++
 		} else if token == "(" {
+			if firstMustBeOperator {
+				return nil, invalidExpression
+			}
 			operators.push(token)
 		} else if token == ")" {
 			for operators.len() > 0 && operators.getLast() != "(" {
@@ -88,8 +97,12 @@ func translateToPostfix(tokens []string) ([]string, error) {
 			if operators.len() == 0 {
 				return nil, mismatchedParentheses
 			}
+			firstMustBeOperator = true
 			operators.pop()
 		} else if isOperator(token) {
+			if firstMustBeOperator {
+				firstMustBeOperator = false
+			}
 			for operators.len() > 0 && getPriority(operators.getLast()) >= getPriority(token) {
 				output = append(output, operators.pop())
 			}
@@ -108,7 +121,7 @@ func translateToPostfix(tokens []string) ([]string, error) {
 	}
 
 	if operatorCount != operandCount-1 {
-		return nil, errors.New("invalid expression")
+		return nil, invalidExpression
 	}
 
 	return output, nil
@@ -165,12 +178,3 @@ func getPriority(op string) int {
 		return 0
 	}
 }
-
-//func main() {
-//	result, err := Calc("1+1")
-//	if err != nil {
-//		fmt.Println("Error:", err)
-//	} else {
-//		fmt.Println("Result:", result)
-//	}
-//}
