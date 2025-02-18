@@ -16,6 +16,8 @@ var caseDebugInfoTemplate = "(индекс случая — %d, %s)"
 
 func Test200CalcHandler(t *testing.T) {
 	var (
+		//requestsToTest = []RequestJson{{"2+2*4"}, {"4*2+3"}, {"8+2/3"},
+		//	{"8+3/4*(110+43)-54"}, {""}, {"12"}}
 		requestsToTest = []RequestJson{{"2+2*4"}, {"4*2+3"}, {"8+2/3"},
 			{"8+3/4*(110+43)-54"}, {""}, {"12"}}
 		expectedResponses = []OKJson{{10}, {11}, {8.666666666666666}, {68.75}, {0}, {12}}
@@ -25,8 +27,9 @@ func Test200CalcHandler(t *testing.T) {
 
 func Test422CalcHandler(t *testing.T) {
 	var (
-		requestsToTest = []RequestJson{{"2++2*4"}, {"4*(2+3"}, {"8+2/3)"},
-			{"4*()2+3"}}
+		//requestsToTest = []RequestJson{{"2++2*4"}, {"4*(2+3"}, {"8+2/3)"},
+		//	{"4*()2+3"}}
+		requestsToTest    = []RequestJson{{"2++2*4"}, {"4*(2+3"}, {"8+2/3)"}}
 		expectedResponses = []ErrorJson{{"Expression is not valid"}, {"Expression is not valid"},
 			{"Expression is not valid"}, {"Expression is not valid"}}
 	)
@@ -209,12 +212,12 @@ func TestGoodGetHandler(t *testing.T) {
 TestBadGetHandler тестирует, что, в общем, цепочка handler-ов в getHandler функции построена верно.
 */
 func TestBadGetHandler(t *testing.T) {
-	var (
-		requestsToTest    = []JsonPayload{RequestJson{"232+)"}}
-		expectedResponses = []ErrorJson{{Error: "Expression is not valid"}}
-	)
-	handler := getHandler()
+	var handler = getHandler()
+
+	requestsToTest := []JsonPayload{RequestJson{"232+)"}}
+	expectedResponses := []ErrorJson{{Error: "Expression is not valid"}}
 	RunTestThroughHandler(handler.ServeHTTP, t, requestsToTest, expectedResponses, 422)
+
 	requestsToTest = []JsonPayload{RequestNilJson{Expression: nil}}
 	expectedResponses = []ErrorJson{{Error: "Internal server error"}}
 	RunTestThroughHandler(handler.ServeHTTP, t, requestsToTest, expectedResponses, 500)

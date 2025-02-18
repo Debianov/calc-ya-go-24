@@ -21,11 +21,11 @@ func CalcHandler(w http.ResponseWriter, r *http.Request) {
 	reader = r.Body
 	buf, err = io.ReadAll(reader)
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 	err = json.Unmarshal(buf, &requestStruct)
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 	var (
 		result float64
@@ -38,11 +38,11 @@ func CalcHandler(w http.ResponseWriter, r *http.Request) {
 	var responseStruct = &OKJson{Result: result}
 	buf, err = responseStruct.Marshal()
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 	_, err = w.Write(buf)
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 	w.WriteHeader(200)
 }
@@ -55,13 +55,13 @@ func expressionValidErrorHandler(w http.ResponseWriter) {
 	)
 	buf, err = errResponse.Marshal()
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 	w.WriteHeader(422)
 	log.Printf("response %s, status code: 422", w)
 	_, err = w.Write(buf)
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 	return
 }
@@ -86,12 +86,12 @@ func internalServerErrorHandler(w http.ResponseWriter) {
 	)
 	buf, err = errResponse.Marshal()
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 	w.WriteHeader(500)
 	_, err = w.Write(buf)
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 	return
 }
