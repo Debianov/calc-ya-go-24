@@ -6,11 +6,6 @@ import (
 	"strings"
 )
 
-var (
-	mismatchedParentheses = errors.New("mismatched parentheses")
-	invalidExpression     = errors.New("invalid expression")
-)
-
 type Stack[T any] struct {
 	buf []T
 }
