@@ -165,12 +165,3 @@ func getPriority(op string) int {
 		return 0
 	}
 }
-
-//func main() {
-//	result, err := Calc("1+1")
-//	if err != nil {
-//		fmt.Println("Error:", err)
-//	} else {
-//		fmt.Println("Result:", result)
-//	}
-//}
