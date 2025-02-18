@@ -32,7 +32,7 @@ func CalcHandler(w http.ResponseWriter, r *http.Request) {
 	)
 	result, err = pkg.Calc(requestStruct.Expression)
 	if err != nil {
-		expressionValidErrorHandler(w)
+		writeExpressionValidError(w)
 		return
 	}
 	var responseStruct = &OKJson{Result: result}
@@ -47,7 +47,7 @@ func CalcHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 }
 
-func expressionValidErrorHandler(w http.ResponseWriter) {
+func writeExpressionValidError(w http.ResponseWriter) {
 	var (
 		buf         []byte
 		err         error
