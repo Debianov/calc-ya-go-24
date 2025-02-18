@@ -33,6 +33,9 @@ func (s *Stack[T]) pop() T {
 }
 
 func Calc(expression string) (float64, error) {
+	if len(expression) == 0 {
+		return 0, nil
+	}
 	tokens := tokenize(expression)
 	postfix, err := translateToPostfix(tokens)
 	if err != nil {
@@ -42,8 +45,10 @@ func Calc(expression string) (float64, error) {
 }
 
 func tokenize(expr string) []string {
-	var tokens []string
-	var currentToken strings.Builder
+	var (
+		tokens       []string
+		currentToken strings.Builder
+	)
 
 	for _, char := range expr {
 		switch char {

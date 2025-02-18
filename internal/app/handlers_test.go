@@ -16,8 +16,6 @@ var caseDebugInfoTemplate = "(индекс случая — %d, %s)"
 
 func Test200CalcHandler(t *testing.T) {
 	var (
-		//requestsToTest = []RequestJson{{"2+2*4"}, {"4*2+3"}, {"8+2/3"},
-		//	{"8+3/4*(110+43)-54"}, {""}, {"12"}}
 		requestsToTest = []RequestJson{{"2+2*4"}, {"4*2+3"}, {"8+2/3"},
 			{"8+3/4*(110+43)-54"}, {""}, {"12"}}
 		expectedResponses = []OKJson{{10}, {11}, {8.666666666666666}, {68.75}, {0}, {12}}
@@ -27,9 +25,8 @@ func Test200CalcHandler(t *testing.T) {
 
 func Test422CalcHandler(t *testing.T) {
 	var (
-		//requestsToTest = []RequestJson{{"2++2*4"}, {"4*(2+3"}, {"8+2/3)"},
-		//	{"4*()2+3"}}
-		requestsToTest    = []RequestJson{{"2++2*4"}, {"4*(2+3"}, {"8+2/3)"}}
+		requestsToTest = []RequestJson{{"2++2*4"}, {"4*(2+3"}, {"8+2/3)"},
+			{"4*()2+3"}}
 		expectedResponses = []ErrorJson{{"Expression is not valid"}, {"Expression is not valid"},
 			{"Expression is not valid"}, {"Expression is not valid"}}
 	)
