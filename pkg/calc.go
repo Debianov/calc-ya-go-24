@@ -28,17 +28,22 @@ func (s *Stack[T]) pop() T {
 	return result
 }
 
-func Calc(expression string) (float64, error) {
+func GeneratePostfix(expression string) (bool, []string) {
 	if len(expression) == 0 {
-		return 0, nil
+		return true, nil
 	}
 	tokens := tokenize(expression)
 	postfix, err := translateToPostfix(tokens)
 	if err != nil {
-		return 0, err
+		return false, nil
 	}
-	return evaluatePostfix(postfix)
+	return true, postfix
 }
+
+//func Calc(expression string) (float64, error) {
+//
+//	return evaluatePostfix(postfix)
+//}
 
 func tokenize(expr string) []string {
 	var (

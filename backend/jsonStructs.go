@@ -1,8 +1,9 @@
-package app
+package backend
 
 import (
 	"encoding/json"
 	"go/types"
+	"time"
 )
 
 type JsonPayload interface {
@@ -49,4 +50,41 @@ type ErrorJson struct {
 func (e ErrorJson) Marshal() (result []byte, err error) {
 	result, err = json.Marshal(&e)
 	return
+}
+
+type Expression struct {
+	Expression []string
+	ID         int    `json:"id""`
+	Status     string `json:"status"`
+	Result     int    `json:"result"`
+}
+
+func (t *Expression) DivideToParallelise() {
+	// TODO
+	return
+}
+
+func (t *Expression) Marshal() (result []byte, err error) {
+	result, err = json.Marshal(&t)
+	return
+}
+
+func (t *Expression) MarshalID() (result []byte, err error) {
+	result, err = json.Marshal(&Expression{ID: t.ID})
+	return
+}
+
+type Task struct {
+	ID            int           `json:"id"`
+	Arg1          int           `json:"arg1"`
+	Arg2          int           `json:"arg2"`
+	Operation     string        `json:"operation"`
+	OperationTime time.Duration `json:"operationTime"`
+	Expression    *Expression
+	result        int
+}
+
+type TaskIsDone struct {
+	ID     int `json:"ID"`
+	Result int `json:"result"`
 }

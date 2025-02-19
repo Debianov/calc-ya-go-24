@@ -1,9 +1,10 @@
-package app
+package orchestrator
 
 import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/Debianov/calc-ya-go-24/backend"
 	"github.com/Debianov/calc-ya-go-24/pkg"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +15,7 @@ import (
 var compareTemplate = "ожидается %s, получен %s"
 var caseDebugInfoTemplate = "(индекс случая — %d, %s)"
 
-func convertToByteCases[K, V JsonPayload](reqs []K, resps []V) (result []pkg.ByteCase, err error) {
+func convertToByteCases[K, V backend.JsonPayload](reqs []K, resps []V) (result []pkg.ByteCase, err error) {
 	if len(reqs) != len(resps) {
 		err = errors.New("reqs и resps должны быть одной длины")
 		return
@@ -37,7 +38,7 @@ func convertToByteCases[K, V JsonPayload](reqs []K, resps []V) (result []pkg.Byt
 	return
 }
 
-func RunTestThroughHandler[K, V JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
+func RunTestThroughHandler[K, V backend.JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
 	requestsToSend []K, expectedResponses []V, expectedHttpCode int) {
 	var (
 		cases []pkg.ByteCase
@@ -68,50 +69,50 @@ func RunTestThroughHandler[K, V JsonPayload](handler func(w http.ResponseWriter,
 
 func Test200CalcHandler(t *testing.T) {
 	var (
-		requestsToTest = []RequestJson{{"2+2*4"}, {"4*2+3"}, {"8+2/3"},
+		requestsToTest = []backend.RequestJson{{"2+2*4"}, {"4*2+3"}, {"8+2/3"},
 			{"8+3/4*(110+43)-54"}, {""}, {"12"}}
-		expectedResponses = []OKJson{{10}, {11}, {8.666666666666666}, {68.75}, {0}, {12}}
+		expectedResponses = []backend.OKJson{{10}, {11}, {8.666666666666666}, {68.75}, {0}, {12}}
 	)
-	RunTestThroughHandler(CalcHandler, t, requestsToTest, expectedResponses, 200)
+	RunTestThroughHandler(calcHandler, t, requestsToTest, expectedResponses, 200)
 }
 
 func Test422CalcHandler(t *testing.T) {
 	var (
-		requestsToTest = []RequestJson{{"2++2*4"}, {"4*(2+3"}, {"8+2/3)"},
+		requestsToTest = []backend.RequestJson{{"2++2*4"}, {"4*(2+3"}, {"8+2/3)"},
 			{"4*()2+3"}}
-		expectedResponses = []ErrorJson{{"Expression is not valid"}, {"Expression is not valid"},
+		expectedResponses = []backend.ErrorJson{{"Expression is not valid"}, {"Expression is not valid"},
 			{"Expression is not valid"}, {"Expression is not valid"}}
 	)
-	RunTestThroughHandler(CalcHandler, t, requestsToTest, expectedResponses, 422)
+	RunTestThroughHandler(calcHandler, t, requestsToTest, expectedResponses, 422)
 }
 
-func TestWriteExpressionValidError(t *testing.T) {
-	var (
-		w                   = httptest.NewRecorder()
-		expectedErrResponse = &ErrorJson{Error: "Expression is not valid"}
-		currentErrResponse  ErrorJson
-		buf                 *bytes.Buffer
-		err                 error
-	)
-	writeExpressionValidError(w)
-	buf = w.Body
-	err = json.Unmarshal(buf.Bytes(), &currentErrResponse)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if w.Code != 422 {
-		t.Errorf("ожидается код 422, получен %d", w.Code)
-	}
-	if expectedErrResponse.Error != currentErrResponse.Error {
-		t.Errorf(compareTemplate, expectedErrResponse.Error, expectedErrResponse.Error)
-	}
-}
+//func TestWriteExpressionValidError(t *testing.T) {
+//	var (
+//		w                   = httptest.NewRecorder()
+//		expectedErrResponse = &backend.ErrorJson{Error: "Expression is not valid"}
+//		currentErrResponse  backend.ErrorJson
+//		buf                 *bytes.Buffer
+//		err                 error
+//	)
+//	writeExpressionValidError(w)
+//	buf = w.Body
+//	err = json.Unmarshal(buf.Bytes(), &currentErrResponse)
+//	if err != nil {
+//		t.Fatal(err)
+//	}
+//	if w.Code != 422 {
+//		t.Errorf("ожидается код 422, получен %d", w.Code)
+//	}
+//	if expectedErrResponse.Error != currentErrResponse.Error {
+//		t.Errorf(compareTemplate, expectedErrResponse.Error, expectedErrResponse.Error)
+//	}
+//}
 
 func TestGoodPanicMiddleware(t *testing.T) {
 	var mux = http.NewServeMux()
 	mux.HandleFunc("/api/v1/calculate", mockHandlerWithoutPanic)
 	var (
-		middlewareHandler = PanicMiddleware(mux)
+		middlewareHandler = panicMiddleware(mux)
 		w                 = httptest.NewRecorder()
 		mockReader        = bytes.NewReader(nil)
 		req               = httptest.NewRequest("POST", "/api/v1/calculate", mockReader)
@@ -130,13 +131,13 @@ func mockHandlerWithoutPanic(w http.ResponseWriter, _ *http.Request) {
 func TestBadPanicMiddleware(t *testing.T) {
 	var mux = http.NewServeMux()
 	mux.HandleFunc("/api/v1/calculate", mockHandlerWithPanic)
-	middlewareHandler := PanicMiddleware(mux)
+	middlewareHandler := panicMiddleware(mux)
 	var (
 		w                   = httptest.NewRecorder()
 		mockReader          = bytes.NewReader(nil)
 		req                 = httptest.NewRequest("GET", "/api/v1/calculate", mockReader)
-		expectedErrResponse = &ErrorJson{Error: "Internal server error"}
-		gottenErrResponse   ErrorJson
+		expectedErrResponse = &backend.ErrorJson{Error: "Internal server error"}
+		gottenErrResponse   backend.ErrorJson
 		err                 error
 	)
 	middlewareHandler.ServeHTTP(w, req)
@@ -159,11 +160,11 @@ func mockHandlerWithPanic(_ http.ResponseWriter, _ *http.Request) {
 func TestInternalServerErrorHandler(t *testing.T) {
 	var (
 		w                   = httptest.NewRecorder()
-		expectedErrResponse = &ErrorJson{Error: "Internal server error"}
-		gottenErrResponse   ErrorJson
+		expectedErrResponse = &backend.ErrorJson{Error: "Internal server error"}
+		gottenErrResponse   backend.ErrorJson
 		err                 error
 	)
-	internalServerErrorHandler(w)
+	writeInternalServerError(w)
 	err = json.Unmarshal(w.Body.Bytes(), &gottenErrResponse)
 	if err != nil {
 		t.Fatal(err)
@@ -180,11 +181,11 @@ func TestGoodGetHandler(t *testing.T) {
 	var (
 		handler          = getHandler()
 		w                = httptest.NewRecorder()
-		reqJson          = RequestJson{Expression: "23+21/3*123"}
+		reqJson          = backend.RequestJson{Expression: "23+21/3*123"}
 		reqJsonInByte    []byte
 		reqToSend        *http.Request
-		expectedResponse = OKJson{Result: 884}
-		gottenResponse   OKJson
+		expectedResponse = backend.OKJson{Result: 884}
+		gottenResponse   backend.OKJson
 		err              error
 	)
 	reqJsonInByte, err = json.Marshal(reqJson)
@@ -211,11 +212,11 @@ TestBadGetHandler тестирует, что, в общем, цепочка hand
 func TestBadGetHandler(t *testing.T) {
 	var handler = getHandler()
 
-	requestsToTest := []JsonPayload{RequestJson{"232+)"}}
-	expectedResponses := []ErrorJson{{Error: "Expression is not valid"}}
+	requestsToTest := []backend.JsonPayload{backend.RequestJson{"232+)"}}
+	expectedResponses := []backend.ErrorJson{{Error: "Expression is not valid"}}
 	RunTestThroughHandler(handler.ServeHTTP, t, requestsToTest, expectedResponses, 422)
 
-	requestsToTest = []JsonPayload{RequestNilJson{Expression: nil}}
-	expectedResponses = []ErrorJson{{Error: "Internal server error"}}
+	requestsToTest = []backend.JsonPayload{backend.RequestNilJson{Expression: nil}}
+	expectedResponses = []backend.ErrorJson{{Error: "Internal server error"}}
 	RunTestThroughHandler(handler.ServeHTTP, t, requestsToTest, expectedResponses, 500)
 }

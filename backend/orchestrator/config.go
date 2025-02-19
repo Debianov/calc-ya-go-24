@@ -1,4 +1,4 @@
-package internal
+package orchestrator
 
 import "net/http"
 
