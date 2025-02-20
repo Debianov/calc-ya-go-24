@@ -2,7 +2,12 @@ package backend
 
 import (
 	"encoding/json"
+	"github.com/Debianov/calc-ya-go-24/pkg"
 	"go/types"
+	"log"
+	"os"
+	"strconv"
+	"sync"
 	"time"
 )
 
@@ -52,39 +57,144 @@ func (e ErrorJson) Marshal() (result []byte, err error) {
 	return
 }
 
+type ExprStatus int
+
+const (
+	Ready ExprStatus = iota
+	NoReadyTasks
+	Completed
+	Cancelled
+)
+
+const (
+	TIME_ADDITION_MS        string = "TIME_ADDITION_MS"
+	TIME_SUBTRACTION_MS            = "TIME_SUBTRACTION_MS"
+	TIME_MULTIPLICATIONS_MS        = "TIME_MULTIPLICATIONS_MS"
+	TIME_DIVISIONS_MS              = "TIME_DIVISIONS_MS"
+)
+
 type Expression struct {
-	Expression []string
-	ID         int    `json:"id""`
-	Status     string `json:"status"`
-	Result     int    `json:"result"`
+	Postfix []string
+	ID      int        `json:"id"`
+	Status  ExprStatus `json:"status"`
+	Result  int        `json:"result"`
+	tasks   pkg.Stack[Task]
+	mut     sync.Mutex
 }
 
-func (t *Expression) DivideToParallelise() {
-	// TODO
+func (e *Expression) DivideIntoTasks() {
+	var (
+		operand               string
+		operandsBeforeOperand []int64
+	)
+	for _, r := range e.Postfix {
+		if r == " " {
+			if operand != "" {
+				operandInInt, err := strconv.ParseInt(operand, 10, 64)
+				if err != nil {
+					log.Panic()
+				}
+				operandsBeforeOperand = append(operandsBeforeOperand, operandInInt)
+				operand = ""
+			} else {
+				continue
+			}
+		} else if pkg.IsNumber(r) {
+			operand += r
+		} else if pkg.IsOperator(r) {
+			var (
+				newId   = e.generateId()
+				newTask *Task
+			)
+			if len(operandsBeforeOperand) == 2 {
+				newTask = &Task{ID: newId, Arg1: operandsBeforeOperand[0], Arg2: operandsBeforeOperand[1],
+					Operation: r, OperationTime: e.getOperationTime(r), isReady: true}
+			} else if len(operandsBeforeOperand) == 1 {
+				newTask = &Task{ID: newId, Arg2: operandsBeforeOperand[0], Operation: r,
+					OperationTime: e.getOperationTime(r)}
+			} else {
+				newTask = &Task{ID: newId, Operation: r, OperationTime: e.getOperationTime(r)}
+			}
+			e.tasks.Push(*newTask)
+			operandsBeforeOperand = make([]int64, 0)
+		}
+	}
 	return
 }
 
-func (t *Expression) Marshal() (result []byte, err error) {
-	result, err = json.Marshal(&t)
+func (e *Expression) generateId() int {
+	return e.tasks.Len() - 1 // TODO нужно в один id впихнуть два
+}
+
+func (e *Expression) getOperationTime(currentOperator string) (result time.Duration) {
+	var (
+		operatorAndEnvNamePairs = map[string]string{"+": TIME_ADDITION_MS, "-": TIME_SUBTRACTION_MS,
+			"*": TIME_MULTIPLICATIONS_MS, "/": TIME_DIVISIONS_MS}
+		maybeDuration string
+		err           error
+	)
+	for operator, envName := range operatorAndEnvNamePairs {
+		if currentOperator == operator {
+			maybeDuration = os.Getenv(envName)
+			if maybeDuration == "" {
+				log.Printf("WARNING: переменная %s не обнаружена", envName)
+			}
+			result, err = time.ParseDuration(maybeDuration)
+			if err != nil {
+				log.Panic(err)
+			}
+		}
+	}
 	return
 }
 
-func (t *Expression) MarshalID() (result []byte, err error) {
-	result, err = json.Marshal(&Expression{ID: t.ID})
+func (e *Expression) GetReadyToSendTask() (result *Task) {
+	task := e.tasks.GetFirst()
+	if task.isReadyToSend() {
+		*result = e.tasks.Pop()
+		defer e.checkLastTaskAndChangeStatus()
+		return result
+	} else {
+		e.changeStatus(NoReadyTasks)
+		return nil
+	}
+}
+
+func (e *Expression) checkLastTaskAndChangeStatus() {
+	toCheck := e.tasks.GetFirst()
+	if !toCheck.isReadyToSend() {
+		e.changeStatus(NoReadyTasks)
+	} else {
+		e.changeStatus(Ready)
+	}
+}
+
+func (e *Expression) changeStatus(status ExprStatus) {
+	e.mut.Lock()
+	defer e.mut.Unlock()
+	e.Status = status
+}
+
+func (e *Expression) Marshal() (result []byte, err error) {
+	result, err = json.Marshal(&e)
+	return
+}
+
+func (e *Expression) MarshalID() (result []byte, err error) {
+	result, err = json.Marshal(&Expression{ID: e.ID})
 	return
 }
 
 type Task struct {
 	ID            int           `json:"id"`
-	Arg1          int           `json:"arg1"`
-	Arg2          int           `json:"arg2"`
+	Arg1          int64         `json:"arg1"`
+	Arg2          int64         `json:"arg2"`
 	Operation     string        `json:"operation"`
 	OperationTime time.Duration `json:"operationTime"`
-	Expression    *Expression
+	isReady       bool
 	result        int
 }
 
-type TaskIsDone struct {
-	ID     int `json:"ID"`
-	Result int `json:"result"`
+func (t *Task) isReadyToSend() bool {
+	return t.isReady
 }

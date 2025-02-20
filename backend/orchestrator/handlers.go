@@ -6,18 +6,69 @@ import (
 	"github.com/Debianov/calc-ya-go-24/pkg"
 	"io"
 	"log"
+	"maps"
 	"net/http"
 	"strconv"
+	"sync"
 )
 
 //var expressionsList = make([]*backend.Expression, 0)
 
 // var expr = backend.ExpressionFabric(postfix, expressionsList)
-// expr.DivideToParallelise()
+// expr.DivideIntoTasks()
 // expressionsList = append(expressionsList, expr)
 //type expressionsQueue struct {
 //	queue []*backend.Expression
 //}
+
+type expressionsList struct {
+	mut   sync.Mutex
+	exprs map[int]*backend.Expression
+}
+
+func (e *expressionsList) FabricPush(postfix []string) (newExpr *backend.Expression, newId int) {
+	newId = e.generateId()
+	newExpr = &backend.Expression{Postfix: postfix, ID: newId, Status: backend.Ready} // TODO init стека, нужна фабрика
+	newExpr.DivideIntoTasks()
+	e.mut.Lock()
+	e.exprs[newId] = newExpr
+	e.mut.Unlock()
+	return
+}
+
+func (e *expressionsList) generateId() (id int) {
+	e.mut.Lock()
+	defer e.mut.Unlock()
+	return len(e.exprs)
+}
+
+func (e *expressionsList) GetAllExprs() []*backend.Expression {
+	e.mut.Lock()
+	defer e.mut.Unlock()
+	var exprs interface{}
+	exprs = maps.Values(e.exprs)
+	return exprs.([]*backend.Expression)
+}
+
+func (e *expressionsList) Get(id int) (*backend.Expression, bool) {
+	e.mut.Lock()
+	var result, ok = e.exprs[id]
+	e.mut.Unlock()
+	return result, ok
+}
+
+func (e *expressionsList) getReadyExpr() (expr *backend.Expression) {
+	e.mut.Lock()
+	defer e.mut.Unlock()
+	for _, v := range e.exprs {
+		if v.Status == backend.Ready {
+			return v
+		}
+	}
+	return nil
+}
+
+var exprsList = &expressionsList{}
 
 func calcHandler(w http.ResponseWriter, r *http.Request) {
 	var (
@@ -43,13 +94,12 @@ func calcHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Panic(err)
 	}
-	ok, postfix := pkg.GeneratePostfix(requestStruct.Expression)
+	postfix, ok := pkg.GeneratePostfix(requestStruct.Expression)
 	if !ok {
 		w.WriteHeader(422)
 		return
 	}
-	id, err := expressionsList.push(postfix)
-	expr, _ := expressionsList.get(id)
+	expr, _ := exprsList.FabricPush(postfix)
 	marshaledExpr, err := expr.MarshalID()
 	if err != nil {
 		log.Panic(err)
@@ -66,9 +116,9 @@ func expressionsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var err error
-	exprs := expressionsList.getAllExprs()
+	exprs := exprsList.GetAllExprs()
 	var exprsJsonHandler = struct {
-		Expressions []backend.Expression `json:"expressions"`
+		Expressions []*backend.Expression `json:"expressions"`
 	}{exprs}
 	exprsHandlerInBytes, err := json.Marshal(&exprsJsonHandler)
 	if err != nil {
@@ -86,18 +136,18 @@ func expressionIdHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	var err error
 	id := r.PathValue("ID")
-	idInINt, err := strconv.ParseInt(id)
+	idInINt, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		log.Panic(err)
 	}
-	expr, exist := expressionsList.get(idInINt)
+	expr, exist := exprsList.Get(int(idInINt))
 	if !exist {
 		w.WriteHeader(404)
 		return
 	}
 	var exprJsonHandler = struct {
 		ExprInstance backend.Expression `json:"expression"`
-	}{expr}
+	}{*expr}
 	exprHandlerInBytes, err := json.Marshal(&exprJsonHandler)
 	if err != nil {
 		log.Panic(err)
@@ -118,19 +168,15 @@ func taskHandler(w http.ResponseWriter, r *http.Request) {
 
 func taskGetHandler(w http.ResponseWriter, r *http.Request) {
 	var err error
-	expr, exist := expressionsList.getFreeExpr()
-	if !exist {
+	expr := exprsList.getReadyExpr()
+	if expr == nil {
 		w.WriteHeader(404)
 		return
 	}
-	task, exist := expr.getFreeTask()
-	if !exist {
-		w.WriteHeader(404)
-		return
-	}
+	task := expr.GetReadyToSendTask()
 	var taskJsonHandler = struct {
 		Task backend.Task `json:"task"`
-	}{task}
+	}{*task}
 	taskJsonHandlerInBytes, err := json.Marshal(&taskJsonHandler)
 	if err != nil {
 		log.Panic(err)
@@ -151,7 +197,10 @@ func taskPostHandler(w http.ResponseWriter, r *http.Request) {
 		log.Panic(err)
 	}
 	var (
-		reqInJson backend.TaskIsDone
+		reqInJson = struct {
+			ID     int `json:"ID"`
+			Result int `json:"result"`
+		}{}
 	)
 	err = json.Unmarshal(reqBuf, &reqInJson)
 	if err != nil {
