@@ -87,7 +87,8 @@ func (e *Expression) DivideIntoTasks() {
 		operand               string
 		operandsBeforeOperand []int64
 	)
-	for _, r := range e.Postfix {
+	for _, r := range e.Postfix { // TODO: сделать структуру в постфиксе, уже распарсенную. нам останется пройтись
+		// TODO по ней слева направо и записать всё в порядке <оператор, операнд, операнд>.
 		if r == " " {
 			if operand != "" {
 				operandInInt, err := strconv.ParseInt(operand, 10, 64)

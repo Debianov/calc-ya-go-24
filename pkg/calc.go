@@ -54,7 +54,7 @@ func tokenize(expr string) []string {
 func translateToPostfix(tokens []string) ([]string, error) {
 	var (
 		output              []string
-		operators           = Stack[string]{make([]string, 0)}
+		operators           = Stack[string]{buf: make([]string, 0)}
 		operandCount        int
 		operatorCount       int
 		firstMustBeOperator bool // после любой ) должен идти только оператор. С помощью этого флага мы будем проверять
