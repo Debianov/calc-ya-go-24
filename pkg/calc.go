@@ -64,13 +64,13 @@ func translateToPostfix(tokens []string) ([]string, error) {
 	for _, token := range tokens {
 		if IsNumber(token) {
 			if firstMustBeOperator {
-				return nil, invalidExpression
+				return nil, InvalidExpression
 			}
 			output = append(output, token)
 			operandCount++
 		} else if token == "(" {
 			if firstMustBeOperator {
-				return nil, invalidExpression
+				return nil, InvalidExpression
 			}
 			operators.Push(token)
 		} else if token == ")" {
@@ -104,7 +104,7 @@ func translateToPostfix(tokens []string) ([]string, error) {
 	}
 
 	if operatorCount != operandCount-1 {
-		return nil, invalidExpression
+		return nil, InvalidExpression
 	}
 
 	return output, nil

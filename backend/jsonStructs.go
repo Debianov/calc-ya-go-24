@@ -162,6 +162,10 @@ func (e *Expression) GetReadyToSendTask() *Task {
 	}
 }
 
+func (e *Expression) GetTask(taskId int) *Task {
+
+}
+
 func (e *Expression) checkLastTaskAndChangeStatus() {
 	toCheck := e.tasks.GetFirst()
 	if !toCheck.isReadyToSend() {

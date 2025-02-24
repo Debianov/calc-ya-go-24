@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"encoding/json"
+	"errors"
 	"github.com/Debianov/calc-ya-go-24/backend"
 	"github.com/Debianov/calc-ya-go-24/pkg"
 	"io"
@@ -11,15 +12,6 @@ import (
 	"strconv"
 	"sync"
 )
-
-//var expressionsList = make([]*backend.Expression, 0)
-
-// var expr = backend.ExpressionFabric(postfix, expressionsList)
-// expr.DivideIntoTasks()
-// expressionsList = append(expressionsList, expr)
-//type expressionsQueue struct {
-//	queue []*backend.Expression
-//}
 
 type expressionsList struct {
 	mut   sync.Mutex
@@ -146,8 +138,8 @@ func expressionIdHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var exprJsonHandler = struct {
-		ExprInstance backend.Expression `json:"expression"`
-	}{*expr}
+		ExprInstance *backend.Expression `json:"expression"`
+	}{expr}
 	exprHandlerInBytes, err := json.Marshal(&exprJsonHandler)
 	if err != nil {
 		log.Panic(err)
@@ -223,8 +215,12 @@ func taskPostHandler(w http.ResponseWriter, r *http.Request) {
 	err = task.writeResult(reqInJson.Result) // TODO гарантировать, что операция будет выполнена только один раз
 	// TODO иначе ошибка
 	if err != nil {
-		log.Panic(err) // TODO err: BUG: разработчиком ожидается, что результат одной и той же задачи не может быть
-		// записан больше одног раза
+		if errors.Is(err, pkg.InvalidExpression) {
+			w.WriteHeader(422)
+		} else {
+			log.Panic(err) // TODO err: BUG: разработчиком ожидается, что результат одной и той же задачи не может быть
+			// TODO записан больше одног раза
+		}
 	}
 }
 
