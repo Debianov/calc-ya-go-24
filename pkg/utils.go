@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"math"
 	"strconv"
 	"sync"
 )
@@ -51,4 +52,20 @@ func (s *Stack[T]) Pop() T {
 	s.buf = s.buf[:len(s.buf)-1]
 	s.mut.Unlock()
 	return result
+}
+
+func Pair(n, m int) int {
+	if n >= m {
+		return n*n + n + m
+	}
+	return m*m + n
+}
+
+func Unpair(z int) (int, int) {
+	q := int(math.Floor(math.Sqrt(float64(z))))
+	l := z - q*q
+	if l < q {
+		return l, q
+	}
+	return q, l - q
 }

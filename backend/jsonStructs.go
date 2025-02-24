@@ -86,6 +86,7 @@ func (e *Expression) DivideIntoTasks() {
 	var (
 		operand               string
 		operandsBeforeOperand []int64
+		operatorCount         int
 	)
 	for _, r := range e.Postfix { // TODO: сделать структуру в постфиксе, уже распарсенную. нам останется пройтись
 		// TODO по ней слева направо и записать всё в порядке <оператор, операнд, операнд>.
@@ -104,7 +105,7 @@ func (e *Expression) DivideIntoTasks() {
 			operand += r
 		} else if pkg.IsOperator(r) {
 			var (
-				newId   = e.generateId()
+				newId   = e.generateId(operatorCount)
 				newTask *Task
 			)
 			if len(operandsBeforeOperand) == 2 {
@@ -112,19 +113,20 @@ func (e *Expression) DivideIntoTasks() {
 					Operation: r, OperationTime: e.getOperationTime(r), isReady: true}
 			} else if len(operandsBeforeOperand) == 1 {
 				newTask = &Task{ID: newId, Arg2: operandsBeforeOperand[0], Operation: r,
-					OperationTime: e.getOperationTime(r)}
+					OperationTime: e.getOperationTime(r), isReady: false}
 			} else {
-				newTask = &Task{ID: newId, Operation: r, OperationTime: e.getOperationTime(r)}
+				newTask = &Task{ID: newId, Operation: r, OperationTime: e.getOperationTime(r), isReady: false}
 			}
 			e.tasks.Push(*newTask)
 			operandsBeforeOperand = make([]int64, 0)
+			operatorCount++
 		}
 	}
 	return
 }
 
-func (e *Expression) generateId() int {
-	return e.tasks.Len() - 1 // TODO нужно в один id впихнуть два
+func (e *Expression) generateId(operatorCount int) int {
+	return pkg.Pair(e.ID, operatorCount)
 }
 
 func (e *Expression) getOperationTime(currentOperator string) (result time.Duration) {
@@ -149,12 +151,11 @@ func (e *Expression) getOperationTime(currentOperator string) (result time.Durat
 	return
 }
 
-func (e *Expression) GetReadyToSendTask() (result *Task) {
-	task := e.tasks.GetFirst()
-	if task.isReadyToSend() {
-		*result = e.tasks.Pop()
-		defer e.checkLastTaskAndChangeStatus()
-		return result
+func (e *Expression) GetReadyToSendTask() *Task {
+	maybeReadyTask := e.tasks.GetFirst()
+	if maybeReadyTask.isReadyToSend() {
+		result := e.tasks.Pop()
+		return &result
 	} else {
 		e.changeStatus(NoReadyTasks)
 		return nil

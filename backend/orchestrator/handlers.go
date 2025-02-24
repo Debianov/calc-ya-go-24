@@ -181,7 +181,10 @@ func taskGetHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Panic(err)
 	}
-	w.Write(taskJsonHandlerInBytes)
+	_, err = w.Write(taskJsonHandlerInBytes)
+	if err != nil {
+		log.Panic(err)
+	}
 }
 
 func taskPostHandler(w http.ResponseWriter, r *http.Request) {
@@ -206,18 +209,23 @@ func taskPostHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Panic(err)
 	}
-	task, exist := agentTasks.pop(reqInJson.ID)
-	if !exist {
+	exprID, taskID := pkg.Unpair(reqInJson.ID)
+	expr, ok := exprsList.Get(exprID)
+	if !ok {
+		w.WriteHeader(404)
+		return
+	}
+	task, ok := expr.GetTask(taskID)
+	if !ok {
 		w.WriteHeader(404)
 		return
 	}
 	err = task.writeResult(reqInJson.Result) // TODO гарантировать, что операция будет выполнена только один раз
-	// иначе ошибка
+	// TODO иначе ошибка
 	if err != nil {
-		log.Panic(err) // TODO err: BUG: разработчиком ожидается, что результат одной и той же задачи не может быть записан больше одног раза
+		log.Panic(err) // TODO err: BUG: разработчиком ожидается, что результат одной и той же задачи не может быть
+		// записан больше одног раза
 	}
-	var expr = task.Expression
-	expr.updateTask(task)
 }
 
 func panicMiddleware(next http.Handler) http.Handler {
