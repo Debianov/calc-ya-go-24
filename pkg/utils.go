@@ -40,18 +40,16 @@ func (s *Stack[T]) GetFirst() T {
 	return s.buf[0]
 }
 
+func (s *Stack[T]) GetFirstPointer() *T {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+	return &s.buf[0]
+}
+
 func (s *Stack[T]) GetLast() T {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 	return s.buf[len(s.buf)-1]
-}
-
-func (s *Stack[T]) Pop() T {
-	result := s.GetLast()
-	s.mut.Lock()
-	s.buf = s.buf[:len(s.buf)-1]
-	s.mut.Unlock()
-	return result
 }
 
 func Pair(n, m int) int {

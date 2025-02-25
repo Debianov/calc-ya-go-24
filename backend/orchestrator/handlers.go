@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 )
 
 type expressionsList struct {
@@ -20,7 +21,8 @@ type expressionsList struct {
 
 func (e *expressionsList) FabricPush(postfix []string) (newExpr *backend.Expression, newId int) {
 	newId = e.generateId()
-	newExpr = &backend.Expression{Postfix: postfix, ID: newId, Status: backend.Ready} // TODO init стека, нужна фабрика
+	newTaskSpace := backend.TaskSpaceFabric()
+	newExpr = &backend.Expression{Postfix: postfix, ID: newId, Status: backend.Ready, TaskHandler: *newTaskSpace}
 	newExpr.DivideIntoTasks()
 	e.mut.Lock()
 	e.exprs[newId] = newExpr
@@ -60,7 +62,7 @@ func (e *expressionsList) getReadyExpr() (expr *backend.Expression) {
 	return nil
 }
 
-var exprsList = &expressionsList{}
+var exprsList = &expressionsList{} // TODO map init in fabric function
 
 func calcHandler(w http.ResponseWriter, r *http.Request) {
 	var (
@@ -165,10 +167,11 @@ func taskGetHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)
 		return
 	}
-	task := expr.GetReadyToSendTask()
-	var taskJsonHandler = struct {
-		Task backend.Task `json:"task"`
-	}{*task}
+	reqInJson := expr.GetReadyToSendTask()
+	if reqInJson.Task == nil {
+		w.WriteHeader(404)
+		return
+	}
 	taskJsonHandlerInBytes, err := json.Marshal(&taskJsonHandler)
 	if err != nil {
 		log.Panic(err)
@@ -177,9 +180,13 @@ func taskGetHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Panic(err)
 	}
+	reqInJson.Task.ChangeStatus(backend.Sent) // TODO якорь: если два подключения одновремено получат один expr и таск,
+	// будет гонка. поставить муты по всей этой функции.
 }
 
 func taskPostHandler(w http.ResponseWriter, r *http.Request) {
+	// TODO якорь: если два подключения одновремено отправят один и тот же результат,
+	// TODO будет гонка. поставить муты по всей этой функции.
 	if r.Header.Get("Content-Type") != "application/json" {
 		return
 	}
@@ -199,29 +206,25 @@ func taskPostHandler(w http.ResponseWriter, r *http.Request) {
 	)
 	err = json.Unmarshal(reqBuf, &reqInJson)
 	if err != nil {
+		w.WriteHeader(422)
 		log.Panic(err)
 	}
-	exprID, taskID := pkg.Unpair(reqInJson.ID)
-	expr, ok := exprsList.Get(exprID)
+	exprId, taskId := pkg.Unpair(reqInJson.ID)
+	expr, ok := exprsList.Get(exprId)
 	if !ok {
 		w.WriteHeader(404)
 		return
 	}
-	task, ok := expr.GetTask(taskID)
-	if !ok {
-		w.WriteHeader(404)
-		return
-	}
-	err = task.writeResult(reqInJson.Result) // TODO гарантировать, что операция будет выполнена только один раз
-	// TODO иначе ошибка
+	err = expr.WriteResultIntoTask(taskId, reqInJson.Result, time.Now())
 	if err != nil {
-		if errors.Is(err, pkg.InvalidExpression) {
-			w.WriteHeader(422)
+		if errors.Is(err, TaskIDNotExist) {
+			w.WriteHeader(404)
+			return
 		} else {
-			log.Panic(err) // TODO err: BUG: разработчиком ожидается, что результат одной и той же задачи не может быть
-			// TODO записан больше одног раза
+			log.Panic(err)
 		}
 	}
+
 }
 
 func panicMiddleware(next http.Handler) http.Handler {

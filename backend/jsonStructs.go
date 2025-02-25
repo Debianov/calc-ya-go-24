@@ -2,6 +2,7 @@ package backend
 
 import (
 	"encoding/json"
+	"errors"
 	"github.com/Debianov/calc-ya-go-24/pkg"
 	"go/types"
 	"log"
@@ -73,13 +74,18 @@ const (
 	TIME_DIVISIONS_MS              = "TIME_DIVISIONS_MS"
 )
 
+type TaskToSend struct {
+	Task              *Task `json:"task"`
+	timeAtSendingTask time.Time
+}
+
 type Expression struct {
-	Postfix []string
-	ID      int        `json:"id"`
-	Status  ExprStatus `json:"status"`
-	Result  int        `json:"result"`
-	tasks   pkg.Stack[Task]
-	mut     sync.Mutex
+	Postfix     []string
+	ID          int        `json:"id"`
+	Status      ExprStatus `json:"status"`
+	Result      int        `json:"result"`
+	TaskHandler Tasks
+	mut         sync.Mutex
 }
 
 func (e *Expression) DivideIntoTasks() {
@@ -109,15 +115,15 @@ func (e *Expression) DivideIntoTasks() {
 				newTask *Task
 			)
 			if len(operandsBeforeOperand) == 2 {
-				newTask = &Task{ID: newId, Arg1: operandsBeforeOperand[0], Arg2: operandsBeforeOperand[1],
-					Operation: r, OperationTime: e.getOperationTime(r), isReady: true}
+				newTask = &Task{PairID: newId, Arg1: operandsBeforeOperand[0], Arg2: operandsBeforeOperand[1],
+					Operation: r, OperationTime: e.getOperationTime(r), isReadyToCalculation: true}
 			} else if len(operandsBeforeOperand) == 1 {
-				newTask = &Task{ID: newId, Arg2: operandsBeforeOperand[0], Operation: r,
-					OperationTime: e.getOperationTime(r), isReady: false}
+				newTask = &Task{PairID: newId, Arg2: operandsBeforeOperand[0], Operation: r,
+					OperationTime: e.getOperationTime(r), isReadyToCalculation: false}
 			} else {
-				newTask = &Task{ID: newId, Operation: r, OperationTime: e.getOperationTime(r), isReady: false}
+				newTask = &Task{PairID: newId, Operation: r, OperationTime: e.getOperationTime(r), isReadyToCalculation: false}
 			}
-			e.tasks.Push(*newTask)
+			e.TaskHandler.add(*newTask)
 			operandsBeforeOperand = make([]int64, 0)
 			operatorCount++
 		}
@@ -151,34 +157,29 @@ func (e *Expression) getOperationTime(currentOperator string) (result time.Durat
 	return
 }
 
-func (e *Expression) GetReadyToSendTask() *Task {
-	maybeReadyTask := e.tasks.GetFirst()
-	if maybeReadyTask.isReadyToSend() {
-		result := e.tasks.Pop()
-		return &result
-	} else {
-		e.changeStatus(NoReadyTasks)
-		return nil
-	}
-}
-
-func (e *Expression) GetTask(taskId int) *Task {
-
-}
-
-func (e *Expression) checkLastTaskAndChangeStatus() {
-	toCheck := e.tasks.GetFirst()
-	if !toCheck.isReadyToSend() {
-		e.changeStatus(NoReadyTasks)
-	} else {
+func (e *Expression) GetReadyToSendTask() TaskToSend {
+	maybeReadyTask := e.TaskHandler.getFirst()
+	if maybeReadyTask.status == ReadyToCalc {
 		e.changeStatus(Ready)
+		taskToSend := e.TaskHandler.fabricAppendInSentTasks(maybeReadyTask, time.Now())
+		return taskToSend
+	} else {
+		e.changeStatus(NoReadyTasks)
+		return TaskToSend{}
 	}
 }
 
 func (e *Expression) changeStatus(status ExprStatus) {
 	e.mut.Lock()
 	defer e.mut.Unlock()
-	e.Status = status
+	if e.Status != status {
+		return
+	}
+	if e.Status != Completed && e.Status != Cancelled {
+		e.Status = status
+	} else {
+		log.Printf("попытка изменения статуса выражения %d, когда его статус %v", e.ID, e.Status)
+	}
 }
 
 func (e *Expression) Marshal() (result []byte, err error) {
@@ -191,16 +192,53 @@ func (e *Expression) MarshalID() (result []byte, err error) {
 	return
 }
 
+func (e *Expression) WriteResultIntoTask(taskID int, result int, timeAtReceiveTask time.Time) (err error) {
+	task, timeAtSendingTask, ok := e.TaskHandler.getTask(taskID)
+	if factTime := timeAtReceiveTask.Sub(timeAtSendingTask); factTime > task.OperationTime {
+		e.changeStatus(Cancelled)
+		return timeoutExecution{task.OperationTime, factTime, task.Operation,
+			task.PairID}
+	}
+	if !ok {
+		return taskIDNotExist{taskID}
+	}
+	err = task.WriteResult(result)
+	if err != nil {
+		log.Panic(err)
+	}
+	e.TaskHandler.CountUpdatedTask()
+	if e.TaskHandler.Len() == 1 {
+		e.changeStatus(Completed)
+	}
+	return
+}
+
+type TaskStatus int
+
+const (
+	ReadyToCalc TaskStatus = iota
+	Sent
+	WaitingOtherTasks
+	Calculated
+)
+
 type Task struct {
-	ID            int           `json:"id"`
+	PairID        int           `json:"id"`
 	Arg1          int64         `json:"arg1"`
 	Arg2          int64         `json:"arg2"`
 	Operation     string        `json:"operation"`
 	OperationTime time.Duration `json:"operationTime"`
-	isReady       bool
 	result        int
+	status        TaskStatus
 }
 
-func (t *Task) isReadyToSend() bool {
-	return t.isReady
+func (t *Task) WriteResult(result int) error {
+	if t.status == Sent {
+		t.result = result
+		t.status = Calculated
+	} else if t.status == Calculated {
+		return errors.New("BUG: разработчиком ожидается, что результат одной и той же задачи не может быть записан" +
+			" больше одного раза")
+	}
+	return nil
 }

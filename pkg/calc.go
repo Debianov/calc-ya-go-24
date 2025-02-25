@@ -75,19 +75,19 @@ func translateToPostfix(tokens []string) ([]string, error) {
 			operators.Push(token)
 		} else if token == ")" {
 			for operators.Len() > 0 && operators.GetLast() != "(" {
-				output = append(output, operators.Pop())
+				output = append(output, operators.PopLast())
 			}
 			if operators.Len() == 0 {
 				return nil, mismatchedParentheses
 			}
 			firstMustBeOperator = true
-			operators.Pop()
+			operators.PopLast()
 		} else if IsOperator(token) {
 			if firstMustBeOperator {
 				firstMustBeOperator = false
 			}
 			for operators.Len() > 0 && getPriority(operators.GetLast()) >= getPriority(token) {
-				output = append(output, operators.Pop())
+				output = append(output, operators.PopLast())
 			}
 			operators.Push(token)
 			operatorCount++
@@ -100,7 +100,7 @@ func translateToPostfix(tokens []string) ([]string, error) {
 		if operators.GetLast() == "(" {
 			return nil, mismatchedParentheses
 		}
-		output = append(output, operators.Pop())
+		output = append(output, operators.PopLast())
 	}
 
 	if operatorCount != operandCount-1 {
@@ -118,8 +118,8 @@ func evaluatePostfix(postfix []string) (float64, error) {
 			num, _ := strconv.ParseFloat(token, 64)
 			stack.Push(num)
 		} else if IsOperator(token) {
-			b := stack.Pop()
-			a := stack.Pop()
+			b := stack.PopLast()
+			a := stack.PopLast()
 
 			switch token {
 			case "+":
