@@ -80,12 +80,12 @@ type TaskToSend struct {
 }
 
 type Expression struct {
-	Postfix     []string
-	ID          int        `json:"id"`
-	Status      ExprStatus `json:"status"`
-	Result      int        `json:"result"`
-	TaskHandler Tasks
-	mut         sync.Mutex
+	Postfix      []string
+	ID           int        `json:"id"`
+	Status       ExprStatus `json:"status"`
+	Result       int        `json:"result"`
+	TasksHandler *Tasks
+	mut          sync.Mutex
 }
 
 func (e *Expression) DivideIntoTasks() {
@@ -116,14 +116,14 @@ func (e *Expression) DivideIntoTasks() {
 			)
 			if len(operandsBeforeOperand) == 2 {
 				newTask = &Task{PairID: newId, Arg1: operandsBeforeOperand[0], Arg2: operandsBeforeOperand[1],
-					Operation: r, OperationTime: e.getOperationTime(r), isReadyToCalculation: true}
+					Operation: r, OperationTime: e.getOperationTime(r), status: ReadyToCalc}
 			} else if len(operandsBeforeOperand) == 1 {
 				newTask = &Task{PairID: newId, Arg2: operandsBeforeOperand[0], Operation: r,
-					OperationTime: e.getOperationTime(r), isReadyToCalculation: false}
+					OperationTime: e.getOperationTime(r), status: WaitingOtherTasks}
 			} else {
-				newTask = &Task{PairID: newId, Operation: r, OperationTime: e.getOperationTime(r), isReadyToCalculation: false}
+				newTask = &Task{PairID: newId, Operation: r, OperationTime: e.getOperationTime(r), status: WaitingOtherTasks}
 			}
-			e.TaskHandler.add(*newTask)
+			e.TasksHandler.add(newTask)
 			operandsBeforeOperand = make([]int64, 0)
 			operatorCount++
 		}
@@ -158,10 +158,10 @@ func (e *Expression) getOperationTime(currentOperator string) (result time.Durat
 }
 
 func (e *Expression) GetReadyToSendTask() TaskToSend {
-	maybeReadyTask := e.TaskHandler.getFirst()
-	if maybeReadyTask.status == ReadyToCalc {
+	maybeReadyTask := e.TasksHandler.getFirst()
+	if maybeReadyTask.IsReadyToCalc() {
 		e.changeStatus(Ready)
-		taskToSend := e.TaskHandler.fabricAppendInSentTasks(maybeReadyTask, time.Now())
+		taskToSend := e.TasksHandler.fabricAppendInSentTasks(maybeReadyTask, time.Now())
 		return taskToSend
 	} else {
 		e.changeStatus(NoReadyTasks)
@@ -193,21 +193,21 @@ func (e *Expression) MarshalID() (result []byte, err error) {
 }
 
 func (e *Expression) WriteResultIntoTask(taskID int, result int, timeAtReceiveTask time.Time) (err error) {
-	task, timeAtSendingTask, ok := e.TaskHandler.getTask(taskID)
+	task, timeAtSendingTask, ok := e.TasksHandler.getTask(taskID)
 	if factTime := timeAtReceiveTask.Sub(timeAtSendingTask); factTime > task.OperationTime {
 		e.changeStatus(Cancelled)
-		return timeoutExecution{task.OperationTime, factTime, task.Operation,
+		return TimeoutExecution{task.OperationTime, factTime, task.Operation,
 			task.PairID}
 	}
 	if !ok {
-		return taskIDNotExist{taskID}
+		return TaskIDNotExist{taskID}
 	}
 	err = task.WriteResult(result)
 	if err != nil {
 		log.Panic(err)
 	}
-	e.TaskHandler.CountUpdatedTask()
-	if e.TaskHandler.Len() == 1 {
+	e.TasksHandler.CountUpdatedTask()
+	if e.TasksHandler.Len() == 1 {
 		e.changeStatus(Completed)
 	}
 	return
@@ -224,15 +224,18 @@ const (
 
 type Task struct {
 	PairID        int           `json:"id"`
-	Arg1          int64         `json:"arg1"`
-	Arg2          int64         `json:"arg2"`
+	Arg1          interface{}   `json:"arg1"`
+	Arg2          interface{}   `json:"arg2"`
 	Operation     string        `json:"operation"`
 	OperationTime time.Duration `json:"operationTime"`
 	result        int
 	status        TaskStatus
+	mut           sync.Mutex
 }
 
 func (t *Task) WriteResult(result int) error {
+	t.mut.Lock()
+	defer t.mut.Unlock()
 	if t.status == Sent {
 		t.result = result
 		t.status = Calculated
@@ -241,4 +244,16 @@ func (t *Task) WriteResult(result int) error {
 			" больше одного раза")
 	}
 	return nil
+}
+
+func (t *Task) ChangeStatus(newStatus TaskStatus) {
+	t.mut.Lock()
+	defer t.mut.Unlock()
+	if t.status != Calculated && t.status != newStatus {
+		t.status = newStatus
+	}
+}
+
+func (t *Task) IsReadyToCalc() bool {
+	return t.status == ReadyToCalc
 }

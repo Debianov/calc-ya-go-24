@@ -7,62 +7,12 @@ import (
 	"github.com/Debianov/calc-ya-go-24/pkg"
 	"io"
 	"log"
-	"maps"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
 )
 
-type expressionsList struct {
-	mut   sync.Mutex
-	exprs map[int]*backend.Expression
-}
-
-func (e *expressionsList) FabricPush(postfix []string) (newExpr *backend.Expression, newId int) {
-	newId = e.generateId()
-	newTaskSpace := backend.TaskSpaceFabric()
-	newExpr = &backend.Expression{Postfix: postfix, ID: newId, Status: backend.Ready, TaskHandler: *newTaskSpace}
-	newExpr.DivideIntoTasks()
-	e.mut.Lock()
-	e.exprs[newId] = newExpr
-	e.mut.Unlock()
-	return
-}
-
-func (e *expressionsList) generateId() (id int) {
-	e.mut.Lock()
-	defer e.mut.Unlock()
-	return len(e.exprs)
-}
-
-func (e *expressionsList) GetAllExprs() []*backend.Expression {
-	e.mut.Lock()
-	defer e.mut.Unlock()
-	var exprs interface{}
-	exprs = maps.Values(e.exprs)
-	return exprs.([]*backend.Expression)
-}
-
-func (e *expressionsList) Get(id int) (*backend.Expression, bool) {
-	e.mut.Lock()
-	var result, ok = e.exprs[id]
-	e.mut.Unlock()
-	return result, ok
-}
-
-func (e *expressionsList) getReadyExpr() (expr *backend.Expression) {
-	e.mut.Lock()
-	defer e.mut.Unlock()
-	for _, v := range e.exprs {
-		if v.Status == backend.Ready {
-			return v
-		}
-	}
-	return nil
-}
-
-var exprsList = &expressionsList{} // TODO map init in fabric function
+var exprsList = backend.ExpressionListFabric()
 
 func calcHandler(w http.ResponseWriter, r *http.Request) {
 	var (
@@ -161,18 +111,21 @@ func taskHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func taskGetHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		return
+	}
 	var err error
-	expr := exprsList.getReadyExpr()
+	expr := exprsList.GetReadyExpr()
 	if expr == nil {
 		w.WriteHeader(404)
 		return
 	}
-	reqInJson := expr.GetReadyToSendTask()
-	if reqInJson.Task == nil {
+	responseInJson := expr.GetReadyToSendTask()
+	if responseInJson.Task == nil {
 		w.WriteHeader(404)
 		return
 	}
-	taskJsonHandlerInBytes, err := json.Marshal(&taskJsonHandler)
+	taskJsonHandlerInBytes, err := json.Marshal(&responseInJson)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -180,13 +133,13 @@ func taskGetHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Panic(err)
 	}
-	reqInJson.Task.ChangeStatus(backend.Sent) // TODO якорь: если два подключения одновремено получат один expr и таск,
-	// будет гонка. поставить муты по всей этой функции.
+	responseInJson.Task.ChangeStatus(backend.Sent)
 }
 
 func taskPostHandler(w http.ResponseWriter, r *http.Request) {
-	// TODO якорь: если два подключения одновремено отправят один и тот же результат,
-	// TODO будет гонка. поставить муты по всей этой функции.
+	if r.Method != http.MethodPost {
+		return
+	}
 	if r.Header.Get("Content-Type") != "application/json" {
 		return
 	}
@@ -217,7 +170,7 @@ func taskPostHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	err = expr.WriteResultIntoTask(taskId, reqInJson.Result, time.Now())
 	if err != nil {
-		if errors.Is(err, TaskIDNotExist) {
+		if errors.Is(err, backend.TaskIDNotExist{}) {
 			w.WriteHeader(404)
 			return
 		} else {

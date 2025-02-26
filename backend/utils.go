@@ -1,35 +1,52 @@
 package backend
 
 import (
+	"maps"
 	"slices"
 	"sync"
 	"time"
 )
 
-// Tasks  обёртка над pkg.Stack с дополнительными методами. Нужен для обработки случаев, когда
-// несколько Task-ов готовы и нужно продолжить работу других Task-ов, зависящие от первых.
-// Task-и, которые нужны для третьего, пока переходят в отдельный tasksWithResultStack.
-// В случае, когда все необходимые Task-и обновлены, они удаляются из stackWithUpdatedTasks
-// , а их результаты записываются в ожидающий Task (первый Task из buf).
+// Tasks - обёртка над pkg.Stack с дополнительными методами. Нужен для обработки случаев, когда несколько Task-ов готовы
+// и нужно продолжить работу других Task-ов, зависящие от первых.
+// В случае, когда все необходимые Task-и обновлены, их результаты записываются в нужный Task, и дальше он отправляется
+// для дальнейшей обработки.
 // Для работы с TaskToSend встроена структура.
 type Tasks struct {
-	sentTasks
-	buf                                []Task
+	*sentTasks
+	buf                                []*Task
 	tasksCountBeforeWaitingTask        int
 	updatedTasksCountBeforeWaitingTask int
+	mut                                sync.Mutex
 }
 
-func (t *Tasks) add(task Task) {
+func (t *Tasks) add(task *Task) {
+	t.mut.Lock()
 	t.buf = append(t.buf, task)
+	t.mut.Unlock()
+}
+
+func (t *Tasks) get(ind int) *Task {
+	t.mut.Lock()
+	defer t.mut.Unlock()
+	return t.buf[ind]
+}
+
+func (t *Tasks) delete(ind int) {
+	t.mut.Lock()
+	defer t.mut.Unlock()
+	slices.Delete(t.buf, ind, ind+1)
 }
 
 func (t *Tasks) Len() int {
+	t.mut.Lock()
+	defer t.mut.Unlock()
 	return len(t.buf)
 }
 
 func (t *Tasks) getFirst() (task *Task) {
-	task = &t.buf[t.tasksCountBeforeWaitingTask]
-	if !t.isWaiting(task) {
+	task = t.get(t.tasksCountBeforeWaitingTask)
+	if task.IsReadyToCalc() {
 		t.tasksCountBeforeWaitingTask++
 		return
 	} else {
@@ -37,26 +54,22 @@ func (t *Tasks) getFirst() (task *Task) {
 		if t.updatedTasksCountBeforeWaitingTask == t.tasksCountBeforeWaitingTask { // цикл в
 			// горутине не требуется, поскольку агент будут самостоятельно тыкать в сервер, чтоб тот проверил на
 			// наличие свободных таск
-			if task.Arg2 != nil {
-				expectedTask = t.buf[0]
-				slices.Delete(t.buf, 0, 1)
+			if _, ok := task.Arg2.(string); ok == true {
+				expectedTask = *t.get(0)
+				t.delete(0)
 				task.Arg2 = int64(expectedTask.result)
 			}
-			if task.Arg1 != nil {
-				expectedTask = t.buf[0]
-				slices.Delete(t.buf, 0, 1)
+			if _, ok := task.Arg1.(string); ok == true {
+				expectedTask = *t.get(0)
+				t.delete(0)
 				task.Arg1 = int64(expectedTask.result)
 			}
-			task.isReadyToCalculation = true
+			task.ChangeStatus(ReadyToCalc)
 			t.updatedTasksCountBeforeWaitingTask = 0
 			t.tasksCountBeforeWaitingTask = 0
 		}
 		return
 	}
-}
-
-func (t *Tasks) isWaiting(task *Task) bool {
-	return task.Arg1 == nil && task.Arg2 == nil
 }
 
 func (t *Tasks) CountUpdatedTask() {
@@ -96,7 +109,62 @@ func sentTasksFabric() *sentTasks {
 	}
 }
 
-func TaskSpaceFabric() *Tasks {
-	newSentTasks := *sentTasksFabric()
+func TasksFabric() *Tasks {
+	newSentTasks := sentTasksFabric()
 	return &Tasks{sentTasks: newSentTasks}
+}
+
+type ExpressionsList struct {
+	mut   sync.Mutex
+	exprs map[int]*Expression
+}
+
+func (e *ExpressionsList) FabricPush(postfix []string) (newExpr *Expression, newId int) {
+	newId = e.generateId()
+	newTaskSpace := TasksFabric()
+	newExpr = &Expression{Postfix: postfix, ID: newId, Status: Ready, TasksHandler: newTaskSpace}
+	newExpr.DivideIntoTasks()
+	e.mut.Lock()
+	e.exprs[newId] = newExpr
+	e.mut.Unlock()
+	return
+}
+
+func (e *ExpressionsList) generateId() (id int) {
+	e.mut.Lock()
+	defer e.mut.Unlock()
+	return len(e.exprs)
+}
+
+func (e *ExpressionsList) GetAllExprs() []*Expression {
+	e.mut.Lock()
+	defer e.mut.Unlock()
+	var exprs interface{}
+	exprs = maps.Values(e.exprs)
+	return exprs.([]*Expression)
+}
+
+func (e *ExpressionsList) Get(id int) (*Expression, bool) {
+	e.mut.Lock()
+	var result, ok = e.exprs[id]
+	e.mut.Unlock()
+	return result, ok
+}
+
+func (e *ExpressionsList) GetReadyExpr() (expr *Expression) {
+	e.mut.Lock()
+	defer e.mut.Unlock()
+	for _, v := range e.exprs {
+		if v.Status == Ready {
+			return v
+		}
+	}
+	return nil
+}
+
+func ExpressionListFabric() *ExpressionsList {
+	return &ExpressionsList{
+		mut:   sync.Mutex{},
+		exprs: make(map[int]*Expression),
+	}
 }
