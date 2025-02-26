@@ -47,9 +47,9 @@ func Test200CalcHandler(t *testing.T) {
 	var (
 		requestsToTest = []backend.RequestJson{{"2+2*4"}, {"4*2+3"}, {"8+2/3"},
 			{"8+3/4*(110+43)-54"}, {""}, {"12"}}
-		expectedResponses = []backend.OKJson{{10}, {11}, {8.666666666666666}, {68.75},
-			{0}, {12}}
-		commonCase = backend.Cases[backend.RequestJson, backend.OKJson]{RequestsToSend: requestsToTest,
+		expectedResponses = []*backend.Expression{{ID: 0}, {ID: 1}, {ID: 2}, {ID: 3},
+			{ID: 4}, {ID: 5}}
+		commonCase = backend.Cases[backend.RequestJson, *backend.Expression]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/calculate",
 			ExpectedHttpCode: http.StatusOK}
 	)

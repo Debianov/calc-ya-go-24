@@ -168,5 +168,3 @@ func ExpressionListFabric() *ExpressionsList {
 		exprs: make(map[int]*Expression),
 	}
 }
-
-type
