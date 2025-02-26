@@ -18,11 +18,6 @@ func GeneratePostfix(expression string) (result []string, isValid bool) {
 	return postfix, true
 }
 
-//func Calc(expression string) (float64, error) {
-//
-//	return evaluatePostfix(postfix)
-//}
-
 func tokenize(expr string) []string {
 	var (
 		tokens       []string
@@ -54,7 +49,7 @@ func tokenize(expr string) []string {
 func translateToPostfix(tokens []string) ([]string, error) {
 	var (
 		output              []string
-		operators           = Stack[string]{buf: make([]string, 0)}
+		operators           = StackFabric[string]()
 		operandCount        int
 		operatorCount       int
 		firstMustBeOperator bool // после любой ) должен идти только оператор. С помощью этого флага мы будем проверять
@@ -75,19 +70,19 @@ func translateToPostfix(tokens []string) ([]string, error) {
 			operators.Push(token)
 		} else if token == ")" {
 			for operators.Len() > 0 && operators.GetLast() != "(" {
-				output = append(output, operators.PopLast())
+				output = append(output, operators.Pop())
 			}
 			if operators.Len() == 0 {
 				return nil, mismatchedParentheses
 			}
 			firstMustBeOperator = true
-			operators.PopLast()
+			operators.Pop()
 		} else if IsOperator(token) {
 			if firstMustBeOperator {
 				firstMustBeOperator = false
 			}
 			for operators.Len() > 0 && getPriority(operators.GetLast()) >= getPriority(token) {
-				output = append(output, operators.PopLast())
+				output = append(output, operators.Pop())
 			}
 			operators.Push(token)
 			operatorCount++
@@ -100,7 +95,7 @@ func translateToPostfix(tokens []string) ([]string, error) {
 		if operators.GetLast() == "(" {
 			return nil, mismatchedParentheses
 		}
-		output = append(output, operators.PopLast())
+		output = append(output, operators.Pop())
 	}
 
 	if operatorCount != operandCount-1 {
@@ -118,8 +113,8 @@ func evaluatePostfix(postfix []string) (float64, error) {
 			num, _ := strconv.ParseFloat(token, 64)
 			stack.Push(num)
 		} else if IsOperator(token) {
-			b := stack.PopLast()
-			a := stack.PopLast()
+			b := stack.Pop()
+			a := stack.Pop()
 
 			switch token {
 			case "+":

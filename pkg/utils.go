@@ -52,6 +52,16 @@ func (s *Stack[T]) GetLast() T {
 	return s.buf[len(s.buf)-1]
 }
 
+func (s *Stack[T]) Pop() T {
+	result := s.GetLast()
+	s.buf = s.buf[:len(s.buf)-1]
+	return result
+}
+
+func StackFabric[T any]() *Stack[T] {
+	return &Stack[T]{buf: make([]T, 0)}
+}
+
 func Pair(n, m int) int {
 	if n >= m {
 		return n*n + n + m
