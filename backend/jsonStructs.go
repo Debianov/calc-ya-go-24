@@ -58,6 +58,13 @@ func (e ErrorJson) Marshal() (result []byte, err error) {
 	return
 }
 
+type EmptyJson struct {
+}
+
+func (e EmptyJson) Marshal() (result []byte, err error) {
+	return
+}
+
 type ExprStatus int
 
 const (
