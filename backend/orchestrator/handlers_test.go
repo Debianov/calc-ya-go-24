@@ -67,6 +67,17 @@ func Test422CalcHandler(t *testing.T) {
 	RunTestThroughHandler(calcHandler, t, commonHttpCase)
 }
 
+func TestGetCalcHandler(t *testing.T) {
+	var (
+		requestsToTest    = []backend.RequestJson{{"2+2*4"}}
+		expectedResponses = []*backend.EmptyJson{{}}
+		commonHttpCase    = backend.Cases[backend.RequestJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
+			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/calculate",
+			ExpectedHttpCode: http.StatusOK}
+	)
+	RunTestThroughHandler(calcHandler, t, commonHttpCase)
+}
+
 //func TestGoodPanicMiddleware(t *testing.T) {
 //	var mux = http.NewServeMux()
 //	mux.HandleFunc("/api/v1/calculate", mockHandlerWithoutPanic)
