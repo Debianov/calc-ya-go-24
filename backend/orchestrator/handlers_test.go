@@ -92,17 +92,20 @@ func TestExpressionHandler200(t *testing.T) {
 		exprsList = backend.ExpressionListFabric()
 	})
 
-	exprsList = backend.ExpressionListFabricWithElements([]*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0},
-		{ID: 1, Status: backend.Completed, Result: 432}, {ID: 2, Status: backend.Cancelled, Result: 0}, {ID: 3,
-			Status: backend.NoReadyTasks, Result: 0}})
+	var (
+		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0},
+			{ID: 1, Status: backend.Completed, Result: 432}, {ID: 2, Status: backend.Cancelled, Result: 0}, {ID: 3,
+				Status: backend.NoReadyTasks, Result: 0}}
+	)
+	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*backend.Expression{{}}
-		commonHttpCase    = backend.Cases[backend.RequestJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
+		expectedResponses = []*backend.Expressions{{expectedExpressions}}
+		commonHttpCase    = backend.Cases[backend.EmptyJson, *backend.Expressions]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/expressions",
 			ExpectedHttpCode: http.StatusOK}
 	)
-	runTestThroughHandler(expressionIdHandler, t, commonHttpCase)
+	runTestThroughHandler(expressionsHandler, t, commonHttpCase)
 }
 
 //func TestGoodPanicMiddleware(t *testing.T) {
