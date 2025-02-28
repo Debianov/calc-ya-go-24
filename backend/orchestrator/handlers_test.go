@@ -42,7 +42,7 @@ func runTestThroughHandler[K, V backend.JsonPayload](handler func(w http.Respons
 	}
 }
 
-func calcHandler200(t *testing.T) {
+func testCalcHandler200(t *testing.T) {
 	var (
 		requestsToTest = []backend.RequestJson{{"2+2*4"}, {"4*2+3"}, {"8+2/3"},
 			{"8+3/4*(110+43)-54"}, {""}, {"12"}}
@@ -55,7 +55,7 @@ func calcHandler200(t *testing.T) {
 	runTestThroughHandler(calcHandler, t, commonHttpCase)
 }
 
-func calcHandler422(t *testing.T) {
+func testCalcHandler422(t *testing.T) {
 	var (
 		requestsToTest = []backend.RequestJson{{"2++2*4"}, {"4*(2+3"}, {"8+2/3)"},
 			{"4*()2+3"}}
@@ -67,7 +67,7 @@ func calcHandler422(t *testing.T) {
 	runTestThroughHandler(calcHandler, t, commonHttpCase)
 }
 
-func calcHandlerGet(t *testing.T) {
+func testCalcHandlerGet(t *testing.T) {
 	var (
 		requestsToTest    = []backend.RequestJson{{"2+2*4"}}
 		expectedResponses = []*backend.EmptyJson{{}}
@@ -82,9 +82,9 @@ func TestCalcHandler(t *testing.T) {
 	t.Cleanup(func() {
 		exprsList = backend.ExpressionListFabric()
 	})
-	t.Run("TestCalcHandler200", calcHandler200)
-	t.Run("TestCalcHandler422", calcHandler422)
-	t.Run("TestCalcHandlerGet", calcHandlerGet)
+	t.Run("TestCalcHandler200", testCalcHandler200)
+	t.Run("TestCalcHandler422", testCalcHandler422)
+	t.Run("TestCalcHandlerGet", testCalcHandlerGet)
 }
 
 func testExpressionHandler200(t *testing.T) {
