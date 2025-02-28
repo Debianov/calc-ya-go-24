@@ -69,7 +69,7 @@ func expressionsHandler(w http.ResponseWriter, r *http.Request) {
 			return -1
 		}
 	})
-	var exprsJsonHandler = backend.Expressions{Expressions: exprs}
+	var exprsJsonHandler = backend.ExpressionsJsonTitle{Expressions: exprs}
 	exprsHandlerInBytes, err := exprsJsonHandler.Marshal()
 	if err != nil {
 		log.Panic(err)
@@ -95,9 +95,7 @@ func expressionIdHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)
 		return
 	}
-	var exprJsonHandler = struct {
-		ExprInstance *backend.Expression `json:"expression"`
-	}{expr}
+	var exprJsonHandler = backend.ExpressionJsonTitle{expr}
 	exprHandlerInBytes, err := json.Marshal(&exprJsonHandler)
 	if err != nil {
 		log.Panic(err)

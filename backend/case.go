@@ -4,10 +4,19 @@ import (
 	"errors"
 )
 
-type Cases[K, V JsonPayload] struct {
+type HttpCases[K, V JsonPayload] struct {
 	RequestsToSend    []K
 	ExpectedResponses []V
 	HttpMethod        string
+	UrlTarget         string
+	ExpectedHttpCode  int
+}
+
+type ServerMuxHttpCases[K, V JsonPayload] struct {
+	RequestsToSend    []K
+	ExpectedResponses []V
+	HttpMethod        string
+	UrlEndpoint       string
 	UrlTarget         string
 	ExpectedHttpCode  int
 }

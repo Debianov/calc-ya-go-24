@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/Debianov/calc-ya-go-24/backend"
 	"net/http"
 	"net/http/httptest"
@@ -13,7 +14,7 @@ var compareTemplate = "ожидается \"%s\", получен \"%s\""
 var caseDebugInfoTemplate = "(индекс случая — %d, параметры случая — %s)"
 
 func runTestThroughHandler[K, V backend.JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
-	testCases backend.Cases[K, V]) {
+	testCases backend.HttpCases[K, V]) {
 	var (
 		cases []backend.ByteCase
 		err   error
@@ -25,13 +26,45 @@ func runTestThroughHandler[K, V backend.JsonPayload](handler func(w http.Respons
 	for ind, testCase := range cases {
 		var (
 			w      = httptest.NewRecorder()
-			reader *bytes.Reader
-			req    *http.Request
+			reader = bytes.NewReader(testCase.ToOutput)
+			req    = httptest.NewRequest(testCases.HttpMethod, testCases.UrlTarget, reader)
 		)
-		reader = bytes.NewReader(testCase.ToOutput)
-		req = httptest.NewRequest(testCases.HttpMethod, testCases.UrlTarget, reader)
 		req.Header.Set("Content-Type", "application/json")
 		handler(w, req)
+		if testCases.ExpectedHttpCode != w.Code {
+			t.Errorf(compareTemplate+" "+caseDebugInfoTemplate, strconv.Itoa(testCases.ExpectedHttpCode),
+				strconv.Itoa(w.Code), ind, testCase)
+		}
+		if bytes.Compare(testCase.Expected, w.Body.Bytes()) != 0 {
+			t.Errorf(compareTemplate+" "+caseDebugInfoTemplate, testCase.Expected, w.Body.Bytes(), ind, testCase)
+		}
+	}
+}
+
+// runTestThroughServeMux работает также, как и runTestThroughHandler, но с обёрткой handler-а в http.ServerMux.
+// Необходимо для тестирования некоторых handler-ов, которые вызывают методы, связанные с парсингом URL в запросах
+// (например, request.PathValue). Парсинг происходит только при вызове http.ServerMux
+// (https://pkg.go.dev/net/http#ServeMux).
+func runTestThroughServeMux[K, V backend.JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
+	testCases backend.ServerMuxHttpCases[K, V]) {
+	var (
+		cases []backend.ByteCase
+		err   error
+	)
+	cases, err = backend.ConvertToByteCases(testCases.RequestsToSend, testCases.ExpectedResponses)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for ind, testCase := range cases {
+		var (
+			w         = httptest.NewRecorder()
+			reader    = bytes.NewReader(testCase.ToOutput)
+			req       = httptest.NewRequest(testCases.HttpMethod, testCases.UrlTarget, reader)
+			serverMux = http.NewServeMux()
+		)
+		req.Header.Set("Content-Type", "application/json")
+		serverMux.HandleFunc(testCases.UrlEndpoint, handler)
+		serverMux.ServeHTTP(w, req)
 		if testCases.ExpectedHttpCode != w.Code {
 			t.Errorf(compareTemplate+" "+caseDebugInfoTemplate, strconv.Itoa(testCases.ExpectedHttpCode),
 				strconv.Itoa(w.Code), ind, testCase)
@@ -48,7 +81,7 @@ func testCalcHandler200(t *testing.T) {
 			{"8+3/4*(110+43)-54"}, {""}, {"12"}}
 		expectedResponses = []*backend.Expression{{ID: 0}, {ID: 1}, {ID: 2}, {ID: 3},
 			{ID: 4}, {ID: 5}}
-		commonHttpCase = backend.Cases[backend.RequestJson, *backend.Expression]{RequestsToSend: requestsToTest,
+		commonHttpCase = backend.HttpCases[backend.RequestJson, *backend.Expression]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/calculate",
 			ExpectedHttpCode: http.StatusOK}
 	)
@@ -60,7 +93,7 @@ func testCalcHandler422(t *testing.T) {
 		requestsToTest = []backend.RequestJson{{"2++2*4"}, {"4*(2+3"}, {"8+2/3)"},
 			{"4*()2+3"}}
 		expectedResponses = []backend.EmptyJson{{}, {}, {}, {}}
-		commonHttpCase    = backend.Cases[backend.RequestJson, backend.EmptyJson]{RequestsToSend: requestsToTest,
+		commonHttpCase    = backend.HttpCases[backend.RequestJson, backend.EmptyJson]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/calculate",
 			ExpectedHttpCode: http.StatusUnprocessableEntity}
 	)
@@ -71,7 +104,7 @@ func testCalcHandlerGet(t *testing.T) {
 	var (
 		requestsToTest    = []backend.RequestJson{{"2+2*4"}}
 		expectedResponses = []*backend.EmptyJson{{}}
-		commonHttpCase    = backend.Cases[backend.RequestJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
+		commonHttpCase    = backend.HttpCases[backend.RequestJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/calculate",
 			ExpectedHttpCode: http.StatusOK}
 	)
@@ -87,28 +120,27 @@ func TestCalcHandler(t *testing.T) {
 	t.Run("TestCalcHandlerGet", testCalcHandlerGet)
 }
 
-func testExpressionHandler200(t *testing.T) {
+func testExpressionsHandler200(t *testing.T) {
 	t.Cleanup(func() {
 		exprsList = backend.ExpressionListFabric()
 	})
 	var (
 		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0},
-			{ID: 0, Status: backend.Ready, Result: 0}, {ID: 1, Status: backend.Completed, Result: 432},
-			{ID: 2, Status: backend.Cancelled, Result: 0}, {ID: 3, Status: backend.NoReadyTasks, Result: 0},
-			{ID: 4, Status: backend.Completed, Result: -2345}}
+			{ID: 1, Status: backend.Completed, Result: 432}, {ID: 2, Status: backend.Cancelled, Result: 0},
+			{ID: 3, Status: backend.NoReadyTasks, Result: 0}, {ID: 4, Status: backend.Completed, Result: -2345}}
 	)
 	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*backend.Expressions{{expectedExpressions}}
-		commonHttpCase    = backend.Cases[backend.EmptyJson, *backend.Expressions]{RequestsToSend: requestsToTest,
+		expectedResponses = []*backend.ExpressionsJsonTitle{{expectedExpressions}}
+		commonHttpCase    = backend.HttpCases[backend.EmptyJson, *backend.ExpressionsJsonTitle]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/expressions",
 			ExpectedHttpCode: http.StatusOK}
 	)
 	runTestThroughHandler(expressionsHandler, t, commonHttpCase)
 }
 
-func testExpressionHandlerPost(t *testing.T) {
+func testExpressionsHandlerPost(t *testing.T) {
 	t.Cleanup(func() {
 		exprsList = backend.ExpressionListFabric()
 	})
@@ -119,19 +151,19 @@ func testExpressionHandlerPost(t *testing.T) {
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.EmptyJson{{}}
-		commonHttpCase    = backend.Cases[backend.EmptyJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
+		commonHttpCase    = backend.HttpCases[backend.EmptyJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/expressions",
 			ExpectedHttpCode: http.StatusOK}
 	)
 	runTestThroughHandler(expressionsHandler, t, commonHttpCase)
 }
 
-func testExpressionHandlerEmpty(t *testing.T) {
+func testExpressionsHandlerEmpty(t *testing.T) {
 	exprsList = backend.ExpressionListFabric() // пустой список выражений
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*backend.Expressions{{Expressions: make([]*backend.Expression, 0)}}
-		commonHttpCase    = backend.Cases[backend.EmptyJson, *backend.Expressions]{RequestsToSend: requestsToTest,
+		expectedResponses = []*backend.ExpressionsJsonTitle{{Expressions: make([]*backend.Expression, 0)}}
+		commonHttpCase    = backend.HttpCases[backend.EmptyJson, *backend.ExpressionsJsonTitle]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/expressions",
 			ExpectedHttpCode: http.StatusOK}
 	)
@@ -140,9 +172,38 @@ func testExpressionHandlerEmpty(t *testing.T) {
 }
 
 func TestExpressionHandler(t *testing.T) {
-	t.Run("TestExpressionHandler200", testExpressionHandler200)
-	t.Run("TestExpressionHandlerPost", testExpressionHandlerPost)
-	t.Run("TestExpressionHadnlerEmpty", testExpressionHandlerEmpty)
+	t.Run("TestExpressionsHandler200", testExpressionsHandler200)
+	t.Run("TestExpressionsHandlerPost", testExpressionsHandlerPost)
+	t.Run("TestExpressionsHadnlerEmpty", testExpressionsHandlerEmpty)
+}
+
+func testExpressionIdHandler200(t *testing.T) {
+	t.Cleanup(func() {
+		exprsList = backend.ExpressionListFabric()
+	})
+	var (
+		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0},
+			{ID: 1, Status: backend.Completed, Result: 431}}
+	)
+	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
+	for ind, expExpr := range expectedExpressions {
+		t.Run(fmt.Sprintf("ExpressionId%d", ind), func(t *testing.T) {
+			var (
+				requestsToTest    = []backend.EmptyJson{{}}
+				expectedResponses = []*backend.ExpressionJsonTitle{{expExpr}}
+				serverMuxHttpCase = backend.ServerMuxHttpCases[backend.EmptyJson, *backend.ExpressionJsonTitle]{
+					RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
+					UrlEndpoint: "/api/v1/expressions/{ID}", UrlTarget: fmt.Sprintf("/api/v1/expressions/%d", ind),
+					ExpectedHttpCode: http.StatusOK}
+			)
+			runTestThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
+		})
+	}
+}
+
+func TestExpressionIdHandler(t *testing.T) {
+	t.Run("TestExpressionIdHandler200", testExpressionIdHandler200)
+
 }
 
 //func expressionIdHandler200(t *testing.T) {
