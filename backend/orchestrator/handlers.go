@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-var exprsList = backend.ExpressionListFabric()
+var exprsList = backend.ExpressionListEmptyFabric()
 
 func calcHandler(w http.ResponseWriter, r *http.Request) {
 	var (

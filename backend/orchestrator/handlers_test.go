@@ -113,7 +113,7 @@ func testCalcHandlerGet(t *testing.T) {
 
 func TestCalcHandler(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.ExpressionListFabric()
+		exprsList = backend.ExpressionListEmptyFabric()
 	})
 	t.Run("TestCalcHandler200", testCalcHandler200)
 	t.Run("TestCalcHandler422", testCalcHandler422)
@@ -122,7 +122,7 @@ func TestCalcHandler(t *testing.T) {
 
 func testExpressionsHandler200(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.ExpressionListFabric()
+		exprsList = backend.ExpressionListEmptyFabric()
 	})
 	var (
 		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0},
@@ -142,7 +142,7 @@ func testExpressionsHandler200(t *testing.T) {
 
 func testExpressionsHandlerPost(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.ExpressionListFabric()
+		exprsList = backend.ExpressionListEmptyFabric()
 	})
 	var (
 		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0}}
@@ -159,7 +159,7 @@ func testExpressionsHandlerPost(t *testing.T) {
 }
 
 func testExpressionsHandlerEmpty(t *testing.T) {
-	exprsList = backend.ExpressionListFabric() // пустой список выражений
+	exprsList = backend.ExpressionListEmptyFabric()
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.ExpressionsJsonTitle{{Expressions: make([]*backend.Expression, 0)}}
@@ -179,7 +179,7 @@ func TestExpressionHandler(t *testing.T) {
 
 func testExpressionIdHandler200(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.ExpressionListFabric()
+		exprsList = backend.ExpressionListEmptyFabric()
 	})
 	var (
 		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0},
@@ -201,9 +201,62 @@ func testExpressionIdHandler200(t *testing.T) {
 	}
 }
 
+func testExpressionIdHandler404(t *testing.T) {
+	t.Cleanup(func() {
+		exprsList = backend.ExpressionListEmptyFabric()
+	})
+	var (
+		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0}}
+	)
+	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
+	var (
+		requestsToTest    = []backend.EmptyJson{{}}
+		expectedResponses = []*backend.EmptyJson{{}}
+		serverMuxHttpCase = backend.ServerMuxHttpCases[backend.EmptyJson, *backend.EmptyJson]{
+			RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
+			UrlEndpoint: "/api/v1/expressions/{ID}", UrlTarget: "/api/v1/expressions/1",
+			ExpectedHttpCode: http.StatusNotFound}
+	)
+	runTestThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
+}
+
+func testExpressionIdHandlerPost(t *testing.T) {
+	t.Cleanup(func() {
+		exprsList = backend.ExpressionListEmptyFabric()
+	})
+	var (
+		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0}}
+	)
+	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
+	var (
+		requestsToTest    = []backend.EmptyJson{{}}
+		expectedResponses = []*backend.EmptyJson{{}}
+		serverMuxHttpCase = backend.ServerMuxHttpCases[backend.EmptyJson, *backend.EmptyJson]{
+			RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "POST",
+			UrlEndpoint: "/api/v1/expressions/{ID}", UrlTarget: "/api/v1/expressions/0",
+			ExpectedHttpCode: http.StatusOK}
+	)
+	runTestThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
+}
+
+func testExpressionIdHandlerEmpty(t *testing.T) {
+	exprsList = backend.ExpressionListEmptyFabric()
+	var (
+		requestsToTest    = []backend.EmptyJson{{}}
+		expectedResponses = []*backend.EmptyJson{{}}
+		serverMuxHttpCase = backend.ServerMuxHttpCases[backend.EmptyJson, *backend.EmptyJson]{
+			RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
+			UrlEndpoint: "/api/v1/expressions/{ID}", UrlTarget: "/api/v1/expressions/0",
+			ExpectedHttpCode: http.StatusNotFound}
+	)
+	runTestThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
+}
+
 func TestExpressionIdHandler(t *testing.T) {
 	t.Run("TestExpressionIdHandler200", testExpressionIdHandler200)
-
+	t.Run("TestExpressionIdHandler404", testExpressionIdHandler404)
+	t.Run("TestExpressionIdHandlerPost", testExpressionIdHandlerPost)
+	t.Run("TestExpressionIdHandlerEmpty", testExpressionIdHandlerEmpty)
 }
 
 //func expressionIdHandler200(t *testing.T) {
@@ -212,7 +265,7 @@ func TestExpressionIdHandler(t *testing.T) {
 //
 //func TestExpressionIdHandler(t *testing.T) {
 //	t.Cleanup(func() {
-//		exprsList = backend.ExpressionListFabric()
+//		exprsList = backend.ExpressionListEmptyFabric()
 //	})
 //	var (
 //		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0}}

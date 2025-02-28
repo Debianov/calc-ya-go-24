@@ -181,7 +181,7 @@ func (e *ExpressionsList) GetReadyExpr() (expr *Expression) {
 	return nil
 }
 
-func ExpressionListFabric() *ExpressionsList {
+func ExpressionListEmptyFabric() *ExpressionsList {
 	return &ExpressionsList{
 		mut:   sync.Mutex{},
 		exprs: make(map[int]*Expression),
