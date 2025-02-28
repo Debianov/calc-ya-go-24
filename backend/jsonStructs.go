@@ -220,6 +220,15 @@ func (e *Expression) WriteResultIntoTask(taskID int, result int, timeAtReceiveTa
 	return
 }
 
+type Expressions struct {
+	Expressions []*Expression `json:"expressions"`
+}
+
+func (e *Expressions) Marshal() (result []byte, err error) {
+	result, err = json.Marshal(&e)
+	return
+}
+
 type TaskStatus int
 
 const (

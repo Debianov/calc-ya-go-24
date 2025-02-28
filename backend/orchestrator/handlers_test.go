@@ -12,7 +12,7 @@ import (
 var compareTemplate = "ожидается \"%s\", получен \"%s\""
 var caseDebugInfoTemplate = "(индекс случая — %d, параметры случая — %s)"
 
-func RunTestThroughHandler[K, V backend.JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
+func runTestThroughHandler[K, V backend.JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
 	testCases backend.Cases[K, V]) {
 	var (
 		cases []backend.ByteCase
@@ -42,7 +42,7 @@ func RunTestThroughHandler[K, V backend.JsonPayload](handler func(w http.Respons
 	}
 }
 
-func Test200CalcHandler(t *testing.T) {
+func calcHandler200(t *testing.T) {
 	var (
 		requestsToTest = []backend.RequestJson{{"2+2*4"}, {"4*2+3"}, {"8+2/3"},
 			{"8+3/4*(110+43)-54"}, {""}, {"12"}}
@@ -52,10 +52,10 @@ func Test200CalcHandler(t *testing.T) {
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/calculate",
 			ExpectedHttpCode: http.StatusOK}
 	)
-	RunTestThroughHandler(calcHandler, t, commonHttpCase)
+	runTestThroughHandler(calcHandler, t, commonHttpCase)
 }
 
-func Test422CalcHandler(t *testing.T) {
+func calcHandler422(t *testing.T) {
 	var (
 		requestsToTest = []backend.RequestJson{{"2++2*4"}, {"4*(2+3"}, {"8+2/3)"},
 			{"4*()2+3"}}
@@ -64,10 +64,10 @@ func Test422CalcHandler(t *testing.T) {
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/calculate",
 			ExpectedHttpCode: http.StatusUnprocessableEntity}
 	)
-	RunTestThroughHandler(calcHandler, t, commonHttpCase)
+	runTestThroughHandler(calcHandler, t, commonHttpCase)
 }
 
-func TestGetCalcHandler(t *testing.T) {
+func calcHandlerGet(t *testing.T) {
 	var (
 		requestsToTest    = []backend.RequestJson{{"2+2*4"}}
 		expectedResponses = []*backend.EmptyJson{{}}
@@ -75,7 +75,34 @@ func TestGetCalcHandler(t *testing.T) {
 			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/calculate",
 			ExpectedHttpCode: http.StatusOK}
 	)
-	RunTestThroughHandler(calcHandler, t, commonHttpCase)
+	runTestThroughHandler(calcHandler, t, commonHttpCase)
+}
+
+func TestCalcHandler(t *testing.T) {
+	t.Cleanup(func() {
+		exprsList = backend.ExpressionListFabric()
+	})
+	t.Run("TestCalcHandler200", calcHandler200)
+	t.Run("TestCalcHandler422", calcHandler422)
+	t.Run("calcHandlerGet", calcHandlerGet)
+}
+
+func TestExpressionHandler200(t *testing.T) {
+	t.Cleanup(func() {
+		exprsList = backend.ExpressionListFabric()
+	})
+
+	exprsList = backend.ExpressionListFabricWithElements([]*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0},
+		{ID: 1, Status: backend.Completed, Result: 432}, {ID: 2, Status: backend.Cancelled, Result: 0}, {ID: 3,
+			Status: backend.NoReadyTasks, Result: 0}})
+	var (
+		requestsToTest    = []backend.EmptyJson{{}}
+		expectedResponses = []*backend.Expression{{}}
+		commonHttpCase    = backend.Cases[backend.RequestJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
+			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/expressions",
+			ExpectedHttpCode: http.StatusOK}
+	)
+	runTestThroughHandler(expressionIdHandler, t, commonHttpCase)
 }
 
 //func TestGoodPanicMiddleware(t *testing.T) {
@@ -184,9 +211,9 @@ func TestGetCalcHandler(t *testing.T) {
 //
 //	requestsToTest := []backend.JsonPayload{backend.RequestJson{"232+)"}}
 //	expectedResponses := []backend.ErrorJson{{Error: "Expression is not valid"}}
-//	RunTestThroughHandler(handler.ServeHTTP, t, requestsToTest, expectedResponses, 422)
+//	runTestThroughHandler(handler.ServeHTTP, t, requestsToTest, expectedResponses, 422)
 //
 //	requestsToTest = []backend.JsonPayload{backend.RequestNilJson{Expression: nil}}
 //	expectedResponses = []backend.ErrorJson{{Error: "Internal server error"}}
-//	RunTestThroughHandler(handler.ServeHTTP, t, requestsToTest, expectedResponses, 500)
+//	runTestThroughHandler(handler.ServeHTTP, t, requestsToTest, expectedResponses, 500)
 //}

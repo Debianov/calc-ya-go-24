@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 )
@@ -61,10 +62,15 @@ func expressionsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	var err error
 	exprs := exprsList.GetAllExprs()
-	var exprsJsonHandler = struct {
-		Expressions []*backend.Expression `json:"expressions"`
-	}{exprs}
-	exprsHandlerInBytes, err := json.Marshal(&exprsJsonHandler)
+	slices.SortFunc(exprs, func(expression *backend.Expression, expression2 *backend.Expression) int {
+		if expression.ID >= expression2.ID {
+			return 0
+		} else {
+			return -1
+		}
+	})
+	var exprsJsonHandler = backend.Expressions{Expressions: exprs}
+	exprsHandlerInBytes, err := exprsJsonHandler.Marshal()
 	if err != nil {
 		log.Panic(err)
 	}

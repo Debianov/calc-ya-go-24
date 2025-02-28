@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"iter"
 	"maps"
 	"slices"
 	"sync"
@@ -136,12 +137,30 @@ func (e *ExpressionsList) generateId() (id int) {
 	return len(e.exprs)
 }
 
+// GetAllExprs выдаёт значения в рандомном порядке.
 func (e *ExpressionsList) GetAllExprs() []*Expression {
 	e.mut.Lock()
 	defer e.mut.Unlock()
-	var exprs interface{}
-	exprs = maps.Values(e.exprs)
-	return exprs.([]*Expression)
+	var (
+		stop          func()
+		v             *Expression
+		next          func() (*Expression, bool)
+		thereAreElems = true
+		seq           iter.Seq[*Expression]
+		result        = make([]*Expression, 0)
+	)
+	seq = maps.Values(e.exprs)
+	next, stop = iter.Pull[*Expression](seq)
+	defer stop()
+	for {
+		v, thereAreElems = next()
+		if thereAreElems != false {
+			result = append(result, v)
+		} else {
+			break
+		}
+	}
+	return result
 }
 
 func (e *ExpressionsList) Get(id int) (*Expression, bool) {
@@ -166,5 +185,16 @@ func ExpressionListFabric() *ExpressionsList {
 	return &ExpressionsList{
 		mut:   sync.Mutex{},
 		exprs: make(map[int]*Expression),
+	}
+}
+
+func ExpressionListFabricWithElements(exprs []*Expression) *ExpressionsList {
+	var result = make(map[int]*Expression)
+	for _, expr := range exprs {
+		result[expr.ID] = expr
+	}
+	return &ExpressionsList{
+		mut:   sync.Mutex{},
+		exprs: result,
 	}
 }
