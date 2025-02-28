@@ -65,13 +65,13 @@ func (e EmptyJson) Marshal() (result []byte, err error) {
 	return
 }
 
-type ExprStatus int
+type ExprStatus string
 
 const (
-	Ready ExprStatus = iota
-	NoReadyTasks
-	Completed
-	Cancelled
+	Ready        ExprStatus = "В ожидании"
+	NoReadyTasks            = "В процессе решения"
+	Completed               = "Выполнено"
+	Cancelled               = "Отменено"
 )
 
 const (

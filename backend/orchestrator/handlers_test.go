@@ -84,14 +84,13 @@ func TestCalcHandler(t *testing.T) {
 	})
 	t.Run("TestCalcHandler200", calcHandler200)
 	t.Run("TestCalcHandler422", calcHandler422)
-	t.Run("calcHandlerGet", calcHandlerGet)
+	t.Run("TestCalcHandlerGet", calcHandlerGet)
 }
 
-func TestExpressionHandler200(t *testing.T) {
+func testExpressionHandler200(t *testing.T) {
 	t.Cleanup(func() {
 		exprsList = backend.ExpressionListFabric()
 	})
-
 	var (
 		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0},
 			{ID: 1, Status: backend.Completed, Result: 432}, {ID: 2, Status: backend.Cancelled, Result: 0}, {ID: 3,
@@ -107,6 +106,58 @@ func TestExpressionHandler200(t *testing.T) {
 	)
 	runTestThroughHandler(expressionsHandler, t, commonHttpCase)
 }
+
+func testExpressionHandlerPost(t *testing.T) {
+	t.Cleanup(func() {
+		exprsList = backend.ExpressionListFabric()
+	})
+	var (
+		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0}}
+	)
+	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
+	var (
+		requestsToTest    = []backend.EmptyJson{{}}
+		expectedResponses = []*backend.EmptyJson{{}}
+		commonHttpCase    = backend.Cases[backend.EmptyJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
+			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/expressions",
+			ExpectedHttpCode: http.StatusOK}
+	)
+	runTestThroughHandler(expressionsHandler, t, commonHttpCase)
+}
+
+func testExpressionHandlerEmpty(t *testing.T) {
+	exprsList = backend.ExpressionListFabric() // пустой список выражений
+	var (
+		requestsToTest    = []backend.EmptyJson{{}}
+		expectedResponses = []*backend.Expressions{{Expressions: make([]*backend.Expression, 0)}}
+		commonHttpCase    = backend.Cases[backend.EmptyJson, *backend.Expressions]{RequestsToSend: requestsToTest,
+			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/expressions",
+			ExpectedHttpCode: http.StatusOK}
+	)
+	runTestThroughHandler(expressionsHandler, t, commonHttpCase)
+
+}
+
+func TestExpressionHandler(t *testing.T) {
+	t.Run("TestExpressionHandler200", testExpressionHandler200)
+	t.Run("TestExpressionHandlerPost", testExpressionHandlerPost)
+	t.Run("TestExpressionHadnlerEmpty", testExpressionHandlerEmpty)
+}
+
+//func expressionIdHandler200(t *testing.T) {
+//
+//}
+//
+//func TestExpressionIdHandler(t *testing.T) {
+//	t.Cleanup(func() {
+//		exprsList = backend.ExpressionListFabric()
+//	})
+//	var (
+//		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0}}
+//	)
+//	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
+//	t.Run("TestExpressionIdHandler", expressionIdHandler200)
+//}
 
 //func TestGoodPanicMiddleware(t *testing.T) {
 //	var mux = http.NewServeMux()
