@@ -129,7 +129,7 @@ func taskGetHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)
 		return
 	}
-	taskJsonHandlerInBytes, err := json.Marshal(&responseInJson)
+	taskJsonHandlerInBytes, err := responseInJson.Marshal()
 	if err != nil {
 		log.Panic(err)
 	}
@@ -156,10 +156,7 @@ func taskPostHandler(w http.ResponseWriter, r *http.Request) {
 		log.Panic(err)
 	}
 	var (
-		reqInJson = struct {
-			ID     int `json:"ID"`
-			Result int `json:"result"`
-		}{}
+		reqInJson backend.AgentResult
 	)
 	err = json.Unmarshal(reqBuf, &reqInJson)
 	if err != nil {

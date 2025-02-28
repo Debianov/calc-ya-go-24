@@ -13,4 +13,5 @@ func main() {
 	//}
 	result, _ := pkg.GeneratePostfix("2 * 3 * 4 + (2 + 3)")
 	fmt.Println(result)
+	//fmt.Println(pkg.Pair(0, 1))
 }

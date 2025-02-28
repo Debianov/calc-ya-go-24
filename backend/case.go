@@ -16,7 +16,7 @@ type ServerMuxHttpCases[K, V JsonPayload] struct {
 	RequestsToSend    []K
 	ExpectedResponses []V
 	HttpMethod        string
-	UrlEndpoint       string
+	UrlTemplate       string
 	UrlTarget         string
 	ExpectedHttpCode  int
 }

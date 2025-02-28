@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 )
 
 var compareTemplate = "ожидается \"%s\", получен \"%s\""
@@ -63,7 +64,7 @@ func runTestThroughServeMux[K, V backend.JsonPayload](handler func(w http.Respon
 			serverMux = http.NewServeMux()
 		)
 		req.Header.Set("Content-Type", "application/json")
-		serverMux.HandleFunc(testCases.UrlEndpoint, handler)
+		serverMux.HandleFunc(testCases.UrlTemplate, handler)
 		serverMux.ServeHTTP(w, req)
 		if testCases.ExpectedHttpCode != w.Code {
 			t.Errorf(compareTemplate+" "+caseDebugInfoTemplate, strconv.Itoa(testCases.ExpectedHttpCode),
@@ -76,6 +77,7 @@ func runTestThroughServeMux[K, V backend.JsonPayload](handler func(w http.Respon
 }
 
 func testCalcHandler200(t *testing.T) {
+	// TODO проверка, что выражение добавлено
 	var (
 		requestsToTest = []backend.RequestJson{{"2+2*4"}, {"4*2+3"}, {"8+2/3"},
 			{"8+3/4*(110+43)-54"}, {""}, {"12"}}
@@ -133,8 +135,7 @@ func testExpressionsHandler200(t *testing.T) {
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.ExpressionsJsonTitle{{expectedExpressions}}
-		commonHttpCase    = backend.HttpCases[backend.EmptyJson, *backend.ExpressionsJsonTitle]{RequestsToSend: requestsToTest,
-			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/expressions",
+		commonHttpCase    = backend.HttpCases[backend.EmptyJson, *backend.ExpressionsJsonTitle]{RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/expressions",
 			ExpectedHttpCode: http.StatusOK}
 	)
 	runTestThroughHandler(expressionsHandler, t, commonHttpCase)
@@ -193,7 +194,7 @@ func testExpressionIdHandler200(t *testing.T) {
 				expectedResponses = []*backend.ExpressionJsonTitle{{expExpr}}
 				serverMuxHttpCase = backend.ServerMuxHttpCases[backend.EmptyJson, *backend.ExpressionJsonTitle]{
 					RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
-					UrlEndpoint: "/api/v1/expressions/{ID}", UrlTarget: fmt.Sprintf("/api/v1/expressions/%d", ind),
+					UrlTemplate: "/api/v1/expressions/{ID}", UrlTarget: fmt.Sprintf("/api/v1/expressions/%d", ind),
 					ExpectedHttpCode: http.StatusOK}
 			)
 			runTestThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
@@ -214,7 +215,7 @@ func testExpressionIdHandler404(t *testing.T) {
 		expectedResponses = []*backend.EmptyJson{{}}
 		serverMuxHttpCase = backend.ServerMuxHttpCases[backend.EmptyJson, *backend.EmptyJson]{
 			RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
-			UrlEndpoint: "/api/v1/expressions/{ID}", UrlTarget: "/api/v1/expressions/1",
+			UrlTemplate: "/api/v1/expressions/{ID}", UrlTarget: "/api/v1/expressions/1",
 			ExpectedHttpCode: http.StatusNotFound}
 	)
 	runTestThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
@@ -233,7 +234,7 @@ func testExpressionIdHandlerPost(t *testing.T) {
 		expectedResponses = []*backend.EmptyJson{{}}
 		serverMuxHttpCase = backend.ServerMuxHttpCases[backend.EmptyJson, *backend.EmptyJson]{
 			RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "POST",
-			UrlEndpoint: "/api/v1/expressions/{ID}", UrlTarget: "/api/v1/expressions/0",
+			UrlTemplate: "/api/v1/expressions/{ID}", UrlTarget: "/api/v1/expressions/0",
 			ExpectedHttpCode: http.StatusOK}
 	)
 	runTestThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
@@ -246,7 +247,7 @@ func testExpressionIdHandlerEmpty(t *testing.T) {
 		expectedResponses = []*backend.EmptyJson{{}}
 		serverMuxHttpCase = backend.ServerMuxHttpCases[backend.EmptyJson, *backend.EmptyJson]{
 			RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
-			UrlEndpoint: "/api/v1/expressions/{ID}", UrlTarget: "/api/v1/expressions/0",
+			UrlTemplate: "/api/v1/expressions/{ID}", UrlTarget: "/api/v1/expressions/0",
 			ExpectedHttpCode: http.StatusNotFound}
 	)
 	runTestThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
@@ -259,20 +260,70 @@ func TestExpressionIdHandler(t *testing.T) {
 	t.Run("TestExpressionIdHandlerEmpty", testExpressionIdHandlerEmpty)
 }
 
-//func expressionIdHandler200(t *testing.T) {
-//
-//}
-//
-//func TestExpressionIdHandler(t *testing.T) {
-//	t.Cleanup(func() {
-//		exprsList = backend.ExpressionListEmptyFabric()
-//	})
-//	var (
-//		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0}}
-//	)
-//	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
-//	t.Run("TestExpressionIdHandler", expressionIdHandler200)
-//}
+func testTaskGetHandler200(t *testing.T) {
+	t.Cleanup(func() {
+		exprsList = backend.ExpressionListEmptyFabric()
+	})
+	exprsList.FabricPush([]string{"2", "3", "*"})
+	var (
+		requestsToTest    = []backend.EmptyJson{{}}
+		expectedResponses = []*backend.TaskToSend{{Task: &backend.Task{
+			PairID:        0,
+			Arg1:          2,
+			Arg2:          3,
+			Operation:     "*",
+			OperationTime: 1 * time.Second,
+		}}}
+		commonHttpCase = backend.HttpCases[backend.EmptyJson, *backend.TaskToSend]{RequestsToSend: requestsToTest,
+			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/internal/task",
+			ExpectedHttpCode: http.StatusOK}
+	)
+	runTestThroughHandler(taskHandler, t, commonHttpCase)
+}
+
+func testTaskGetHandler404(t *testing.T) {
+	t.Cleanup(func() {
+		exprsList = backend.ExpressionListEmptyFabric()
+	})
+	var (
+		requestsToTest    = []backend.EmptyJson{{}}
+		expectedResponses = []*backend.EmptyJson{{}}
+		commonHttpCase    = backend.HttpCases[backend.EmptyJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
+			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/internal/task",
+			ExpectedHttpCode: http.StatusNotFound}
+	)
+	runTestThroughHandler(taskHandler, t, commonHttpCase)
+}
+
+func testTaskPostHandler200(t *testing.T) {
+	t.Cleanup(func() {
+		exprsList = backend.ExpressionListEmptyFabric()
+	})
+	exprsList.FabricPush([]string{"2", "3", "*"})
+	var (
+		requestsToTest    = []*backend.AgentResult{{ID: 0, Result: 6}}
+		expectedResponses = []backend.EmptyJson{{}}
+		commonHttpCase    = backend.HttpCases[*backend.AgentResult, backend.EmptyJson]{RequestsToSend: requestsToTest,
+			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/internal/task",
+			ExpectedHttpCode: http.StatusOK}
+	)
+	runTestThroughHandler(taskHandler, t, commonHttpCase)
+
+	expr, _ := exprsList.Get(0)
+	if expr.Result != 6 {
+		t.Errorf("Ожидается Result %d по Expression %d, получен %d", 6, expr.ID, expr.Result)
+	}
+}
+
+func TestTaskHandler(t *testing.T) {
+	t.Run("TestTaskGetHandler200", testTaskGetHandler200)
+	t.Run("TestTaskGetHandler404", testTaskGetHandler404)
+	t.Run("TestTaskPostHandler200", testTaskPostHandler200)
+	//t.Run("TestTaskPostHandler404", testTaskPostHandler404)
+	//t.Run("TestTaskPostHandler422", testTaskPostHandler422)
+	//t.Run("TestTaskPostHandlerEmpty", testTaskPostHandlerEmpty)
+	//t.Run("TestTaskPostHandlerTimeout", testTaskPostHandlerEmpty)
+}
 
 //func TestGoodPanicMiddleware(t *testing.T) {
 //	var mux = http.NewServeMux()

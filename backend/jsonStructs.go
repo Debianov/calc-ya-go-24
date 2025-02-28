@@ -81,12 +81,12 @@ const (
 	TIME_DIVISIONS_MS              = "TIME_DIVISIONS_MS"
 )
 
-type TaskJsonTitle struct {
+type TaskToSend struct {
 	Task              *Task `json:"task"`
 	timeAtSendingTask time.Time
 }
 
-func (t *TaskJsonTitle) Marshal() (result []byte, err error) {
+func (t *TaskToSend) Marshal() (result []byte, err error) {
 	result, err = json.Marshal(&t)
 	return
 }
@@ -161,7 +161,7 @@ func (e *Expression) getOperationTime(currentOperator string) (result time.Durat
 	return
 }
 
-func (e *Expression) GetReadyToSendTask() TaskJsonTitle {
+func (e *Expression) GetReadyToSendTask() TaskToSend {
 	maybeReadyTask := e.TasksHandler.getFirst()
 	if maybeReadyTask.IsReadyToCalc() {
 		e.changeStatus(Ready)
@@ -169,7 +169,7 @@ func (e *Expression) GetReadyToSendTask() TaskJsonTitle {
 		return taskToSend
 	} else {
 		e.changeStatus(NoReadyTasks)
-		return TaskJsonTitle{}
+		return TaskToSend{}
 	}
 }
 
@@ -198,13 +198,13 @@ func (e *Expression) MarshalID() (result []byte, err error) {
 
 func (e *Expression) WriteResultIntoTask(taskID int, result int, timeAtReceiveTask time.Time) (err error) {
 	task, timeAtSendingTask, ok := e.TasksHandler.getTask(taskID)
+	if !ok {
+		return TaskIDNotExist{taskID}
+	}
 	if factTime := timeAtReceiveTask.Sub(timeAtSendingTask); factTime > task.OperationTime {
 		e.changeStatus(Cancelled)
 		return TimeoutExecution{task.OperationTime, factTime, task.Operation,
 			task.PairID}
-	}
-	if !ok {
-		return TaskIDNotExist{taskID}
 	}
 	err = task.WriteResult(result)
 	if err != nil {
@@ -213,8 +213,15 @@ func (e *Expression) WriteResultIntoTask(taskID int, result int, timeAtReceiveTa
 	e.TasksHandler.CountUpdatedTask()
 	if e.TasksHandler.Len() == 1 {
 		e.changeStatus(Completed)
+		e.writeResult(e.TasksHandler.getFirst().result)
 	}
 	return
+}
+
+func (e *Expression) writeResult(result int) {
+	e.mut.Lock()
+	defer e.mut.Unlock()
+	e.Result = result
 }
 
 type ExpressionsJsonTitle struct {
@@ -278,4 +285,14 @@ func (t *Task) ChangeStatus(newStatus TaskStatus) {
 
 func (t *Task) IsReadyToCalc() bool {
 	return t.status == ReadyToCalc
+}
+
+type AgentResult struct {
+	ID     int `json:"ID"`
+	Result int `json:"result"`
+}
+
+func (a *AgentResult) Marshal() (result []byte, err error) {
+	result, err = json.Marshal(&a)
+	return
 }
