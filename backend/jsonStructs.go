@@ -81,9 +81,14 @@ const (
 	TIME_DIVISIONS_MS              = "TIME_DIVISIONS_MS"
 )
 
-type TaskToSend struct {
+type TaskJsonTitle struct {
 	Task              *Task `json:"task"`
 	timeAtSendingTask time.Time
+}
+
+func (t *TaskJsonTitle) Marshal() (result []byte, err error) {
+	result, err = json.Marshal(&t)
+	return
 }
 
 type Expression struct {
@@ -97,25 +102,17 @@ type Expression struct {
 
 func (e *Expression) DivideIntoTasks() {
 	var (
-		operand               string
 		operandsBeforeOperand []int64
 		operatorCount         int
 	)
 	for _, r := range e.Postfix { // TODO: сделать структуру в постфиксе, уже распарсенную. нам останется пройтись
 		// TODO по ней слева направо и записать всё в порядке <оператор, операнд, операнд>.
-		if r == " " {
-			if operand != "" {
-				operandInInt, err := strconv.ParseInt(operand, 10, 64)
-				if err != nil {
-					log.Panic()
-				}
-				operandsBeforeOperand = append(operandsBeforeOperand, operandInInt)
-				operand = ""
-			} else {
-				continue
+		if pkg.IsNumber(r) {
+			operandInInt, err := strconv.ParseInt(r, 10, 64)
+			if err != nil {
+				log.Panic(err)
 			}
-		} else if pkg.IsNumber(r) {
-			operand += r
+			operandsBeforeOperand = append(operandsBeforeOperand, operandInInt)
 		} else if pkg.IsOperator(r) {
 			var (
 				newId   = e.generateId(operatorCount)
@@ -164,7 +161,7 @@ func (e *Expression) getOperationTime(currentOperator string) (result time.Durat
 	return
 }
 
-func (e *Expression) GetReadyToSendTask() TaskToSend {
+func (e *Expression) GetReadyToSendTask() TaskJsonTitle {
 	maybeReadyTask := e.TasksHandler.getFirst()
 	if maybeReadyTask.IsReadyToCalc() {
 		e.changeStatus(Ready)
@@ -172,7 +169,7 @@ func (e *Expression) GetReadyToSendTask() TaskToSend {
 		return taskToSend
 	} else {
 		e.changeStatus(NoReadyTasks)
-		return TaskToSend{}
+		return TaskJsonTitle{}
 	}
 }
 
