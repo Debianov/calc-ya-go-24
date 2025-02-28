@@ -93,8 +93,9 @@ func testExpressionHandler200(t *testing.T) {
 	})
 	var (
 		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0},
-			{ID: 1, Status: backend.Completed, Result: 432}, {ID: 2, Status: backend.Cancelled, Result: 0}, {ID: 3,
-				Status: backend.NoReadyTasks, Result: 0}}
+			{ID: 0, Status: backend.Ready, Result: 0}, {ID: 1, Status: backend.Completed, Result: 432},
+			{ID: 2, Status: backend.Cancelled, Result: 0}, {ID: 3, Status: backend.NoReadyTasks, Result: 0},
+			{ID: 4, Status: backend.Completed, Result: -2345}}
 	)
 	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
 	var (
