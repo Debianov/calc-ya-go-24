@@ -264,7 +264,7 @@ func testTaskGetHandler200(t *testing.T) {
 	t.Cleanup(func() {
 		exprsList = backend.ExpressionListEmptyFabric()
 	})
-	exprsList.FabricPush([]string{"2", "3", "*"})
+	exprsList.ExprFabricAdd([]string{"2", "3", "*"})
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.TaskToSend{{Task: &backend.Task{
@@ -299,7 +299,7 @@ func testTaskPostHandler200(t *testing.T) {
 	t.Cleanup(func() {
 		exprsList = backend.ExpressionListEmptyFabric()
 	})
-	exprsList.FabricPush([]string{"2", "3", "*"})
+	exprsList.ExprFabricAdd([]string{"2", "3", "*"})
 	var (
 		requestsToTest    = []*backend.AgentResult{{ID: 0, Result: 6}}
 		expectedResponses = []backend.EmptyJson{{}}

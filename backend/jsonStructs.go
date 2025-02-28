@@ -165,7 +165,7 @@ func (e *Expression) GetReadyToSendTask() TaskToSend {
 	maybeReadyTask := e.TasksHandler.getFirst()
 	if maybeReadyTask.IsReadyToCalc() {
 		e.changeStatus(Ready)
-		taskToSend := e.TasksHandler.fabricAppendInSentTasks(maybeReadyTask, time.Now())
+		taskToSend := e.TasksHandler.TaskToSendFabricAdd(maybeReadyTask, time.Now())
 		return taskToSend
 	} else {
 		e.changeStatus(NoReadyTasks)
@@ -197,7 +197,7 @@ func (e *Expression) MarshalID() (result []byte, err error) {
 }
 
 func (e *Expression) WriteResultIntoTask(taskID int, result int, timeAtReceiveTask time.Time) (err error) {
-	task, timeAtSendingTask, ok := e.TasksHandler.getTask(taskID)
+	task, timeAtSendingTask, ok := e.TasksHandler.getSentTask(taskID)
 	if !ok {
 		return TaskIDNotExist{taskID}
 	}

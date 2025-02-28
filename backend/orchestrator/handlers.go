@@ -44,7 +44,7 @@ func calcHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(422)
 		return
 	}
-	expr, _ := exprsList.FabricPush(postfix)
+	expr, _ := exprsList.ExprFabricAdd(postfix)
 	marshaledExpr, err := expr.MarshalID()
 	if err != nil {
 		log.Panic(err)

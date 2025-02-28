@@ -83,7 +83,7 @@ type sentTasks struct {
 	mut sync.Mutex
 }
 
-func (t *sentTasks) fabricAppendInSentTasks(readyTask *Task, timeAtSendingTask time.Time) (result TaskToSend) {
+func (t *sentTasks) TaskToSendFabricAdd(readyTask *Task, timeAtSendingTask time.Time) (result TaskToSend) {
 	result = TaskToSend{
 		Task:              readyTask,
 		timeAtSendingTask: timeAtSendingTask,
@@ -94,7 +94,7 @@ func (t *sentTasks) fabricAppendInSentTasks(readyTask *Task, timeAtSendingTask t
 	return
 }
 
-func (t *sentTasks) getTask(taskId int) (*Task, time.Time, bool) {
+func (t *sentTasks) getSentTask(taskId int) (*Task, time.Time, bool) {
 	t.mut.Lock()
 	taskWithTimer, ok := t.buf[taskId]
 	if ok {
@@ -120,7 +120,7 @@ type ExpressionsList struct {
 	exprs map[int]*Expression
 }
 
-func (e *ExpressionsList) FabricPush(postfix []string) (newExpr *Expression, newId int) {
+func (e *ExpressionsList) ExprFabricAdd(postfix []string) (newExpr *Expression, newId int) {
 	newId = e.generateId()
 	newTaskSpace := TasksFabric()
 	newExpr = &Expression{Postfix: postfix, ID: newId, Status: Ready, TasksHandler: newTaskSpace}
