@@ -68,8 +68,8 @@ func (e EmptyJson) Marshal() (result []byte, err error) {
 type ExprStatus string
 
 const (
-	Ready        ExprStatus = "В ожидании"
-	NoReadyTasks            = "В процессе решения"
+	Ready        ExprStatus = "Есть готовые задачи"
+	NoReadyTasks            = "Нет готовых задач"
 	Completed               = "Выполнено"
 	Cancelled               = "Отменено"
 )
@@ -161,10 +161,14 @@ func (e *Expression) getOperationTime(currentOperator string) (result time.Durat
 	return
 }
 
-func (e *Expression) GetReadyToSendTask() TaskToSend {
-	maybeReadyTask := e.TasksHandler.getFirst()
+func (e *Expression) FabricReadyExprSendTask() TaskToSend {
+	maybeReadyTask := e.TasksHandler.registerFirst()
 	if maybeReadyTask.IsReadyToCalc() {
-		e.changeStatus(Ready)
+		if e.TasksHandler.Len() == 1 {
+			e.changeStatus(NoReadyTasks)
+		} else {
+			e.changeStatus(Ready)
+		}
 		taskToSend := e.TasksHandler.TaskToSendFabricAdd(maybeReadyTask, time.Now())
 		return taskToSend
 	} else {
@@ -176,7 +180,7 @@ func (e *Expression) GetReadyToSendTask() TaskToSend {
 func (e *Expression) changeStatus(status ExprStatus) {
 	e.mut.Lock()
 	defer e.mut.Unlock()
-	if e.Status != status {
+	if e.Status == status {
 		return
 	}
 	if e.Status != Completed && e.Status != Cancelled {
@@ -213,7 +217,7 @@ func (e *Expression) WriteResultIntoTask(taskID int, result int, timeAtReceiveTa
 	e.TasksHandler.CountUpdatedTask()
 	if e.TasksHandler.Len() == 1 {
 		e.changeStatus(Completed)
-		e.writeResult(e.TasksHandler.getFirst().result)
+		e.writeResult(task.result)
 	}
 	return
 }
@@ -278,6 +282,9 @@ func (t *Task) WriteResult(result int) error {
 func (t *Task) ChangeStatus(newStatus TaskStatus) {
 	t.mut.Lock()
 	defer t.mut.Unlock()
+	if t.status == newStatus {
+		return
+	}
 	if t.status != Calculated && t.status != newStatus {
 		t.status = newStatus
 	}

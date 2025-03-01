@@ -27,7 +27,7 @@ func (t *Tasks) add(task *Task) {
 	t.mut.Unlock()
 }
 
-func (t *Tasks) get(ind int) *Task {
+func (t *Tasks) Get(ind int) *Task {
 	t.mut.Lock()
 	defer t.mut.Unlock()
 	return t.buf[ind]
@@ -45,8 +45,11 @@ func (t *Tasks) Len() int {
 	return len(t.buf)
 }
 
-func (t *Tasks) getFirst() (task *Task) {
-	task = t.get(t.tasksCountBeforeWaitingTask)
+// registerFirst возвращает первую задачу, не удаляет её, но регистрирует и не выдаёт ту же задачу в дальнейшем.
+// Удаляет в том случае, если задача не используется для вычисления других задач.
+// Для простого получения задачи используйте Get.
+func (t *Tasks) registerFirst() (task *Task) {
+	task = t.Get(t.tasksCountBeforeWaitingTask)
 	if task.IsReadyToCalc() {
 		t.tasksCountBeforeWaitingTask++
 		return
@@ -56,12 +59,12 @@ func (t *Tasks) getFirst() (task *Task) {
 			// горутине не требуется, поскольку агент будут самостоятельно тыкать в сервер, чтоб тот проверил на
 			// наличие свободных таск
 			if _, ok := task.Arg2.(string); ok == true {
-				expectedTask = *t.get(0)
+				expectedTask = *t.Get(0)
 				t.delete(0)
 				task.Arg2 = int64(expectedTask.result)
 			}
 			if _, ok := task.Arg1.(string); ok == true {
-				expectedTask = *t.get(0)
+				expectedTask = *t.Get(0)
 				t.delete(0)
 				task.Arg1 = int64(expectedTask.result)
 			}
@@ -73,6 +76,8 @@ func (t *Tasks) getFirst() (task *Task) {
 	}
 }
 
+// CountUpdatedTask обновляет число отправленных тасок. Обязателен к вызову, если любой Task, указатель которого
+// хранится в экземпляре этой структуры, был обновлён.
 func (t *Tasks) CountUpdatedTask() {
 	t.updatedTasksCountBeforeWaitingTask++
 }

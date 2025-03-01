@@ -124,7 +124,7 @@ func taskGetHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)
 		return
 	}
-	responseInJson := expr.GetReadyToSendTask()
+	responseInJson := expr.FabricReadyExprSendTask()
 	if responseInJson.Task == nil {
 		w.WriteHeader(404)
 		return

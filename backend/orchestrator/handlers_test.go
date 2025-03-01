@@ -281,10 +281,8 @@ func testTaskGetHandler200(t *testing.T) {
 	runTestThroughHandler(taskHandler, t, commonHttpCase)
 }
 
-func testTaskGetHandler404(t *testing.T) {
-	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
-	})
+func testTaskGetHandlerEmpty404(t *testing.T) {
+	exprsList = backend.ExpressionListEmptyFabric()
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.EmptyJson{{}}
@@ -293,6 +291,33 @@ func testTaskGetHandler404(t *testing.T) {
 			ExpectedHttpCode: http.StatusNotFound}
 	)
 	runTestThroughHandler(taskHandler, t, commonHttpCase)
+}
+
+func testTaskGetHandler404(t *testing.T) {
+	t.Cleanup(func() {
+		exprsList = backend.ExpressionListEmptyFabric()
+	})
+	exprsList.ExprFabricAdd([]string{"2", "3", "*"})
+	var (
+		requestsToTest    = []backend.EmptyJson{{}}
+		expectedResponses = []*backend.TaskToSend{{Task: &backend.Task{
+			PairID:        0,
+			Arg1:          2,
+			Arg2:          3,
+			Operation:     "*",
+			OperationTime: 1 * time.Second,
+		}}}
+		requestsToTest2    = []backend.EmptyJson{{}}
+		expectedResponses2 = []*backend.EmptyJson{{}}
+		commonHttpCase     = backend.HttpCases[backend.EmptyJson, *backend.TaskToSend]{RequestsToSend: requestsToTest,
+			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/internal/task",
+			ExpectedHttpCode: http.StatusOK}
+		commonHttpCase2 = backend.HttpCases[backend.EmptyJson, *backend.EmptyJson]{RequestsToSend: requestsToTest2,
+			ExpectedResponses: expectedResponses2, HttpMethod: "GET", UrlTarget: "/internal/task",
+			ExpectedHttpCode: http.StatusNotFound}
+	)
+	runTestThroughHandler(taskHandler, t, commonHttpCase)
+	runTestThroughHandler(taskHandler, t, commonHttpCase2)
 }
 
 func testTaskPostHandler200(t *testing.T) {
@@ -307,16 +332,24 @@ func testTaskPostHandler200(t *testing.T) {
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/internal/task",
 			ExpectedHttpCode: http.StatusOK}
 	)
+	stubExpr := exprsList.GetReadyExpr()
+	stubExpr.FabricReadyExprSendTask()
+	stubTask := stubExpr.TasksHandler.Get(0)
+	stubTask.ChangeStatus(backend.Sent)
 	runTestThroughHandler(taskHandler, t, commonHttpCase)
-
-	expr, _ := exprsList.Get(0)
-	if expr.Result != 6 {
-		t.Errorf("Ожидается Result %d по Expression %d, получен %d", 6, expr.ID, expr.Result)
+	if stubExpr.Result != 6 {
+		t.Errorf("Ожидается Result %d по Expression %d, получен %d", 6, stubExpr.ID, stubExpr.Result)
 	}
+}
+
+func testTaskPostHandler404(t *testing.T) {
+	exprsList = backend.ExpressionListEmptyFabric()
+
 }
 
 func TestTaskHandler(t *testing.T) {
 	t.Run("TestTaskGetHandler200", testTaskGetHandler200)
+	t.Run("TestTaskGetHandlerEmpty404", testTaskGetHandlerEmpty404)
 	t.Run("TestTaskGetHandler404", testTaskGetHandler404)
 	t.Run("TestTaskPostHandler200", testTaskPostHandler200)
 	//t.Run("TestTaskPostHandler404", testTaskPostHandler404)
