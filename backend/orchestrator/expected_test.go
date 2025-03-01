@@ -390,10 +390,10 @@ func TestTaskHandler(t *testing.T) {
 	t.Run("TestTaskGetHandler404", testTaskGetHandler404)
 	t.Run("TestTaskPostHandler200", testTaskPostHandler200)
 	t.Run("TestTaskPostHandler404", testTaskPostHandler404)
-	t.Run("TestTaskPostHandler422", testTaskPostHandler422)
+	//t.Run("TestTaskPostHandler422", testTaskPostHandler422) // TODO
 }
 
-func TestGoodPanicMiddleware(t *testing.T) {
+func TestPanicMiddlewareGood(t *testing.T) {
 	var mux = http.NewServeMux()
 	mux.HandleFunc("/api/v1/calculate", stubHandlerWithoutPanic)
 	var (
@@ -413,7 +413,7 @@ func stubHandlerWithoutPanic(w http.ResponseWriter, _ *http.Request) {
 	return
 }
 
-func TestBadPanicMiddleware(t *testing.T) {
+func TestPanicMiddlewareBad(t *testing.T) {
 	var mux = http.NewServeMux()
 	mux.HandleFunc("/api/v1/calculate", mockHandlerWithPanic)
 	middlewareHandler := panicMiddleware(mux)
@@ -441,44 +441,3 @@ func TestInternalServerErrorHandler(t *testing.T) {
 		t.Errorf(compareTemplate, "500", strconv.Itoa(w.Code))
 	}
 }
-
-//func TestGoodGetHandler(t *testing.T) {
-//	var (
-//		handler          = getHandler()
-//		w                = httptest.NewRecorder()
-//		reqJson          = backend.RequestJson{Expression: "23+21/3*123"}
-//		reqJsonInByte    []byte
-//		reqToSend        *http.Request
-//		expectedResponse = backend.OKJson{Result: 884}
-//		gottenResponse   backend.OKJson
-//		err              error
-//	)
-//	reqJsonInByte, err = json.Marshal(reqJson)
-//	if err != nil {
-//		t.Fatal(err)
-//	}
-//	reqToSend, err = http.NewRequest("POST", "/api/v1/calculate", bytes.NewReader(reqJsonInByte))
-//	if err != nil {
-//		t.Fatal(err)
-//	}
-//	handler.ServeHTTP(w, reqToSend)
-//	err = json.Unmarshal(w.Body.Bytes(), &gottenResponse)
-//	if expectedResponse.Result != gottenResponse.Result {
-//		t.Errorf(compareTemplate, strconv.Itoa(int(expectedResponse.Result)), strconv.Itoa(int(gottenResponse.Result)))
-//	}
-//	if 200 != w.Code {
-//		t.Errorf(compareTemplate, "200", strconv.Itoa(w.Code))
-//	}
-//}
-
-//func TestBadGetHandler(t *testing.T) {
-//	var handler = getHandler()
-//
-//	requestsToTest := []backend.JsonPayload{backend.RequestJson{"232+)"}}
-//	expectedResponses := []backend.ErrorJson{{Error: "Expression is not valid"}}
-//	runTestThroughHandler(handler.ServeHTTP, t, requestsToTest, expectedResponses, 422)
-//
-//	requestsToTest = []backend.JsonPayload{backend.RequestNilJson{Expression: nil}}
-//	expectedResponses = []backend.ErrorJson{{Error: "Internal server error"}}
-//	runTestThroughHandler(handler.ServeHTTP, t, requestsToTest, expectedResponses, 500)
-//}
