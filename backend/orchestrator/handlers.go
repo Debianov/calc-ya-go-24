@@ -161,7 +161,6 @@ func taskPostHandler(w http.ResponseWriter, r *http.Request) {
 	err = json.Unmarshal(reqBuf, &reqInJson)
 	if err != nil {
 		w.WriteHeader(422)
-		log.Panic(err)
 	}
 	exprId, taskId := pkg.Unpair(reqInJson.ID)
 	expr, ok := exprsList.Get(exprId)
@@ -194,20 +193,7 @@ func panicMiddleware(next http.Handler) http.Handler {
 }
 
 func writeInternalServerError(w http.ResponseWriter) {
-	var (
-		buf         []byte
-		err         error
-		errResponse = &backend.ErrorJson{Error: "Internal server error"}
-	)
-	buf, err = errResponse.Marshal()
-	if err != nil {
-		log.Panic(err)
-	}
 	w.WriteHeader(500)
-	_, err = w.Write(buf)
-	if err != nil {
-		log.Panic(err)
-	}
 	return
 }
 

@@ -1,7 +1,11 @@
+// Тестирование случаев, предусмотренных ТЗ.
+
 package orchestrator
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/Debianov/calc-ya-go-24/backend"
 	"net/http"
@@ -14,6 +18,8 @@ import (
 var compareTemplate = "ожидается \"%s\", получен \"%s\""
 var caseDebugInfoTemplate = "(индекс случая — %d, параметры случая — %s)"
 
+// runTestThroughHandler запускает все тесты через handler, используя параметры testCases.
+// Генерируемый запрос всегда отправляется с заголовком "Content-Type": "application/json".
 func runTestThroughHandler[K, V backend.JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
 	testCases backend.HttpCases[K, V]) {
 	var (
@@ -175,7 +181,7 @@ func testExpressionsHandlerEmpty(t *testing.T) {
 func TestExpressionHandler(t *testing.T) {
 	t.Run("TestExpressionsHandler200", testExpressionsHandler200)
 	t.Run("TestExpressionsHandlerPost", testExpressionsHandlerPost)
-	t.Run("TestExpressionsHadnlerEmpty", testExpressionsHandlerEmpty)
+	t.Run("TestExpressionsHandlerEmpty", testExpressionsHandlerEmpty)
 }
 
 func testExpressionIdHandler200(t *testing.T) {
@@ -336,7 +342,9 @@ func testTaskPostHandler200(t *testing.T) {
 	stubExpr.FabricReadyExprSendTask()
 	stubTask := stubExpr.TasksHandler.Get(0)
 	stubTask.ChangeStatus(backend.Sent)
+
 	runTestThroughHandler(taskHandler, t, commonHttpCase)
+
 	if stubExpr.Result != 6 {
 		t.Errorf("Ожидается Result %d по Expression %d, получен %d", 6, stubExpr.ID, stubExpr.Result)
 	}
@@ -344,7 +352,36 @@ func testTaskPostHandler200(t *testing.T) {
 
 func testTaskPostHandler404(t *testing.T) {
 	exprsList = backend.ExpressionListEmptyFabric()
+	var (
+		requestsToTest    = []*backend.AgentResult{{ID: 0, Result: 6}}
+		expectedResponses = []backend.EmptyJson{{}}
+		commonHttpCase    = backend.HttpCases[*backend.AgentResult, backend.EmptyJson]{RequestsToSend: requestsToTest,
+			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/internal/task",
+			ExpectedHttpCode: http.StatusNotFound}
+	)
+	runTestThroughHandler(taskHandler, t, commonHttpCase)
+}
 
+type RandomJson struct {
+	Hey   int `json:"hey"`
+	Issue int `json:"issue"`
+}
+
+func (r *RandomJson) Marshal() (result []byte, err error) {
+	result, err = json.Marshal(&r)
+	return
+}
+
+func testTaskPostHandler422(t *testing.T) {
+	exprsList = backend.ExpressionListEmptyFabric()
+	var (
+		requestsToTest    = []*RandomJson{{Hey: 0, Issue: 6}}
+		expectedResponses = []backend.EmptyJson{{}}
+		commonHttpCase    = backend.HttpCases[*RandomJson, backend.EmptyJson]{RequestsToSend: requestsToTest,
+			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/internal/task",
+			ExpectedHttpCode: http.StatusUnprocessableEntity}
+	)
+	runTestThroughHandler(taskHandler, t, commonHttpCase)
 }
 
 func TestTaskHandler(t *testing.T) {
@@ -352,81 +389,59 @@ func TestTaskHandler(t *testing.T) {
 	t.Run("TestTaskGetHandlerEmpty404", testTaskGetHandlerEmpty404)
 	t.Run("TestTaskGetHandler404", testTaskGetHandler404)
 	t.Run("TestTaskPostHandler200", testTaskPostHandler200)
-	//t.Run("TestTaskPostHandler404", testTaskPostHandler404)
-	//t.Run("TestTaskPostHandler422", testTaskPostHandler422)
-	//t.Run("TestTaskPostHandlerEmpty", testTaskPostHandlerEmpty)
-	//t.Run("TestTaskPostHandlerTimeout", testTaskPostHandlerEmpty)
+	t.Run("TestTaskPostHandler404", testTaskPostHandler404)
+	t.Run("TestTaskPostHandler422", testTaskPostHandler422)
 }
 
-//func TestGoodPanicMiddleware(t *testing.T) {
-//	var mux = http.NewServeMux()
-//	mux.HandleFunc("/api/v1/calculate", mockHandlerWithoutPanic)
-//	var (
-//		middlewareHandler = panicMiddleware(mux)
-//		w                 = httptest.NewRecorder()
-//		mockReader        = bytes.NewReader(nil)
-//		req               = httptest.NewRequest("POST", "/api/v1/calculate", mockReader)
-//	)
-//	middlewareHandler.ServeHTTP(w, req)
-//	if 200 != w.Code {
-//		t.Errorf(compareTemplate, "200", strconv.Itoa(w.Code))
-//	}
-//}
-//
-//func mockHandlerWithoutPanic(w http.ResponseWriter, _ *http.Request) {
-//	w.WriteHeader(200)
-//	return
-//}
-//
-//func TestBadPanicMiddleware(t *testing.T) {
-//	var mux = http.NewServeMux()
-//	mux.HandleFunc("/api/v1/calculate", mockHandlerWithPanic)
-//	middlewareHandler := panicMiddleware(mux)
-//	var (
-//		w                   = httptest.NewRecorder()
-//		mockReader          = bytes.NewReader(nil)
-//		req                 = httptest.NewRequest("GET", "/api/v1/calculate", mockReader)
-//		expectedErrResponse = &backend.ErrorJson{Error: "Internal server error"}
-//		gottenErrResponse   backend.ErrorJson
-//		err                 error
-//	)
-//	middlewareHandler.ServeHTTP(w, req)
-//	err = json.Unmarshal(w.Body.Bytes(), &gottenErrResponse)
-//	if err != nil {
-//		t.Fatal(err)
-//	}
-//	if 500 != w.Code {
-//		t.Errorf(compareTemplate, "500", strconv.Itoa(w.Code))
-//	}
-//	if expectedErrResponse.Error != gottenErrResponse.Error {
-//		t.Errorf(compareTemplate, expectedErrResponse.Error, gottenErrResponse.Error)
-//	}
-//}
-//
-//func mockHandlerWithPanic(_ http.ResponseWriter, _ *http.Request) {
-//	panic(errors.New("ААААААА!!!!"))
-//}
-//
-//func TestInternalServerErrorHandler(t *testing.T) {
-//	var (
-//		w                   = httptest.NewRecorder()
-//		expectedErrResponse = &backend.ErrorJson{Error: "Internal server error"}
-//		gottenErrResponse   backend.ErrorJson
-//		err                 error
-//	)
-//	writeInternalServerError(w)
-//	err = json.Unmarshal(w.Body.Bytes(), &gottenErrResponse)
-//	if err != nil {
-//		t.Fatal(err)
-//	}
-//	if 500 != w.Code {
-//		t.Errorf(compareTemplate, "500", strconv.Itoa(w.Code))
-//	}
-//	if expectedErrResponse.Error != gottenErrResponse.Error {
-//		t.Errorf(compareTemplate, expectedErrResponse.Error, gottenErrResponse.Error)
-//	}
-//}
-//
+func TestGoodPanicMiddleware(t *testing.T) {
+	var mux = http.NewServeMux()
+	mux.HandleFunc("/api/v1/calculate", stubHandlerWithoutPanic)
+	var (
+		middlewareHandler = panicMiddleware(mux)
+		w                 = httptest.NewRecorder()
+		mockReader        = bytes.NewReader(nil)
+		req               = httptest.NewRequest("POST", "/api/v1/calculate", mockReader)
+	)
+	middlewareHandler.ServeHTTP(w, req)
+	if 200 != w.Code {
+		t.Errorf(compareTemplate, "200", strconv.Itoa(w.Code))
+	}
+}
+
+func stubHandlerWithoutPanic(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(200)
+	return
+}
+
+func TestBadPanicMiddleware(t *testing.T) {
+	var mux = http.NewServeMux()
+	mux.HandleFunc("/api/v1/calculate", mockHandlerWithPanic)
+	middlewareHandler := panicMiddleware(mux)
+	var (
+		w          = httptest.NewRecorder()
+		mockReader = bytes.NewReader(nil)
+		req        = httptest.NewRequest("GET", "/api/v1/calculate", mockReader)
+	)
+	middlewareHandler.ServeHTTP(w, req)
+	if 500 != w.Code {
+		t.Errorf(compareTemplate, "500", strconv.Itoa(w.Code))
+	}
+}
+
+func mockHandlerWithPanic(_ http.ResponseWriter, _ *http.Request) {
+	panic(errors.New("ААААААА!!!!"))
+}
+
+func TestInternalServerErrorHandler(t *testing.T) {
+	var (
+		w = httptest.NewRecorder()
+	)
+	writeInternalServerError(w)
+	if 500 != w.Code {
+		t.Errorf(compareTemplate, "500", strconv.Itoa(w.Code))
+	}
+}
+
 //func TestGoodGetHandler(t *testing.T) {
 //	var (
 //		handler          = getHandler()
@@ -456,9 +471,6 @@ func TestTaskHandler(t *testing.T) {
 //	}
 //}
 
-///*
-//TestBadGetHandler тестирует, что, в общем, цепочка handler-ов в getHandler функции построена верно.
-//*/
 //func TestBadGetHandler(t *testing.T) {
 //	var handler = getHandler()
 //
