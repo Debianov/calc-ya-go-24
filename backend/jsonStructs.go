@@ -41,7 +41,7 @@ func (r RequestNilJson) Marshal() (result []byte, err error) {
 }
 
 type OKJson struct {
-	Result float64 `json:"result"`
+	Result float64 `json:"Result"`
 }
 
 func (o OKJson) Marshal() (result []byte, err error) {
@@ -94,8 +94,8 @@ func (t *TaskToSend) Marshal() (result []byte, err error) {
 type Expression struct {
 	Postfix      []string
 	ID           int        `json:"id"`
-	Status       ExprStatus `json:"status"`
-	Result       int        `json:"result"`
+	Status       ExprStatus `json:"Status"`
+	Result       int        `json:"Result"`
 	TasksHandler *Tasks
 	mut          sync.Mutex
 }
@@ -120,12 +120,12 @@ func (e *Expression) DivideIntoTasks() {
 			)
 			if len(operandsBeforeOperand) == 2 {
 				newTask = &Task{PairID: newId, Arg1: operandsBeforeOperand[0], Arg2: operandsBeforeOperand[1],
-					Operation: r, OperationTime: e.getOperationTime(r), status: ReadyToCalc}
+					Operation: r, OperationTime: e.getOperationTime(r), Status: ReadyToCalc}
 			} else if len(operandsBeforeOperand) == 1 {
 				newTask = &Task{PairID: newId, Arg2: operandsBeforeOperand[0], Operation: r,
-					OperationTime: e.getOperationTime(r), status: WaitingOtherTasks}
+					OperationTime: e.getOperationTime(r), Status: WaitingOtherTasks}
 			} else {
-				newTask = &Task{PairID: newId, Operation: r, OperationTime: e.getOperationTime(r), status: WaitingOtherTasks}
+				newTask = &Task{PairID: newId, Operation: r, OperationTime: e.getOperationTime(r), Status: WaitingOtherTasks}
 			}
 			e.TasksHandler.add(newTask)
 			operandsBeforeOperand = make([]int64, 0)
@@ -217,7 +217,7 @@ func (e *Expression) WriteResultIntoTask(taskID int, result int, timeAtReceiveTa
 	e.TasksHandler.CountUpdatedTask()
 	if e.TasksHandler.Len() == 1 {
 		e.changeStatus(Completed)
-		e.writeResult(task.result)
+		e.writeResult(task.Result)
 	}
 	return
 }
@@ -261,18 +261,18 @@ type Task struct {
 	Arg2          interface{}   `json:"arg2"`
 	Operation     string        `json:"operation"`
 	OperationTime time.Duration `json:"operationTime"`
-	result        int
-	status        TaskStatus
+	Result        int
+	Status        TaskStatus
 	mut           sync.Mutex
 }
 
 func (t *Task) WriteResult(result int) error {
 	t.mut.Lock()
 	defer t.mut.Unlock()
-	if t.status == Sent {
-		t.result = result
-		t.status = Calculated
-	} else if t.status == Calculated {
+	if t.Status == Sent {
+		t.Result = result
+		t.Status = Calculated
+	} else if t.Status == Calculated {
 		return errors.New("BUG: разработчиком ожидается, что результат одной и той же задачи не может быть записан" +
 			" больше одного раза")
 	}
@@ -282,21 +282,21 @@ func (t *Task) WriteResult(result int) error {
 func (t *Task) ChangeStatus(newStatus TaskStatus) {
 	t.mut.Lock()
 	defer t.mut.Unlock()
-	if t.status == newStatus {
+	if t.Status == newStatus {
 		return
 	}
-	if t.status != Calculated && t.status != newStatus {
-		t.status = newStatus
+	if t.Status != Calculated && t.Status != newStatus {
+		t.Status = newStatus
 	}
 }
 
 func (t *Task) IsReadyToCalc() bool {
-	return t.status == ReadyToCalc
+	return t.Status == ReadyToCalc
 }
 
 type AgentResult struct {
 	ID     int `json:"ID"`
-	Result int `json:"result"`
+	Result int `json:"Result"`
 }
 
 func (a *AgentResult) Marshal() (result []byte, err error) {

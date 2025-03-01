@@ -105,7 +105,7 @@ func translateToPostfix(tokens []string) ([]string, error) {
 	return output, nil
 }
 
-func evaluatePostfix(postfix []string) (float64, error) {
+func EvaluatePostfix(postfix []string) (float64, error) {
 	var stack = Stack[float64]{buf: make([]float64, 0)}
 
 	for _, token := range postfix {

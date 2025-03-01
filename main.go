@@ -11,7 +11,8 @@ func main() {
 	//if err != nil {
 	//	panic(err)
 	//}
-	result, _ := pkg.GeneratePostfix("2 * 3 * 4 + (2 + 3)")
-	fmt.Println(result)
-	//fmt.Println(pkg.Pair(0, 1))
+	result, _ := pkg.GeneratePostfix("2+2*4")
+	b, _ := pkg.EvaluatePostfix(result)
+	fmt.Println(b, result)
+	//fmt.Println(pkg.Pair(1, 2))
 }

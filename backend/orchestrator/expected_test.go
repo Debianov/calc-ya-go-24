@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Debianov/calc-ya-go-24/backend"
+	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -16,11 +17,10 @@ import (
 )
 
 var compareTemplate = "ожидается \"%s\", получен \"%s\""
-var caseDebugInfoTemplate = "(индекс случая — %d, параметры случая — %s)"
 
-// runTestThroughHandler запускает все тесты через handler, используя параметры testCases.
+// testThroughHandler запускает все тесты через handler, используя параметры testCases.
 // Генерируемый запрос всегда отправляется с заголовком "Content-Type": "application/json".
-func runTestThroughHandler[K, V backend.JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
+func testThroughHandler[K, V backend.JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
 	testCases backend.HttpCases[K, V]) {
 	var (
 		cases []backend.ByteCase
@@ -30,7 +30,7 @@ func runTestThroughHandler[K, V backend.JsonPayload](handler func(w http.Respons
 	if err != nil {
 		t.Fatal(err)
 	}
-	for ind, testCase := range cases {
+	for _, testCase := range cases {
 		var (
 			w      = httptest.NewRecorder()
 			reader = bytes.NewReader(testCase.ToOutput)
@@ -39,20 +39,20 @@ func runTestThroughHandler[K, V backend.JsonPayload](handler func(w http.Respons
 		req.Header.Set("Content-Type", "application/json")
 		handler(w, req)
 		if testCases.ExpectedHttpCode != w.Code {
-			t.Errorf(compareTemplate+" "+caseDebugInfoTemplate, strconv.Itoa(testCases.ExpectedHttpCode),
-				strconv.Itoa(w.Code), ind, testCase)
+			t.Errorf(compareTemplate, strconv.Itoa(testCases.ExpectedHttpCode),
+				strconv.Itoa(w.Code))
 		}
 		if bytes.Compare(testCase.Expected, w.Body.Bytes()) != 0 {
-			t.Errorf(compareTemplate+" "+caseDebugInfoTemplate, testCase.Expected, w.Body.Bytes(), ind, testCase)
+			t.Errorf(compareTemplate, testCase.Expected, w.Body.Bytes())
 		}
 	}
 }
 
-// runTestThroughServeMux работает также, как и runTestThroughHandler, но с обёрткой handler-а в http.ServerMux.
+// testThroughServeMux работает также, как и testThroughHandler, но с обёрткой handler-а в http.ServerMux.
 // Необходимо для тестирования некоторых handler-ов, которые вызывают методы, связанные с парсингом URL в запросах
 // (например, request.PathValue). Парсинг происходит только при вызове http.ServerMux
 // (https://pkg.go.dev/net/http#ServeMux).
-func runTestThroughServeMux[K, V backend.JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
+func testThroughServeMux[K, V backend.JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
 	testCases backend.ServerMuxHttpCases[K, V]) {
 	var (
 		cases []backend.ByteCase
@@ -62,7 +62,7 @@ func runTestThroughServeMux[K, V backend.JsonPayload](handler func(w http.Respon
 	if err != nil {
 		t.Fatal(err)
 	}
-	for ind, testCase := range cases {
+	for _, testCase := range cases {
 		var (
 			w         = httptest.NewRecorder()
 			reader    = bytes.NewReader(testCase.ToOutput)
@@ -73,27 +73,48 @@ func runTestThroughServeMux[K, V backend.JsonPayload](handler func(w http.Respon
 		serverMux.HandleFunc(testCases.UrlTemplate, handler)
 		serverMux.ServeHTTP(w, req)
 		if testCases.ExpectedHttpCode != w.Code {
-			t.Errorf(compareTemplate+" "+caseDebugInfoTemplate, strconv.Itoa(testCases.ExpectedHttpCode),
-				strconv.Itoa(w.Code), ind, testCase)
+			t.Errorf(compareTemplate, strconv.Itoa(testCases.ExpectedHttpCode),
+				strconv.Itoa(w.Code))
 		}
 		if bytes.Compare(testCase.Expected, w.Body.Bytes()) != 0 {
-			t.Errorf(compareTemplate+" "+caseDebugInfoTemplate, testCase.Expected, w.Body.Bytes(), ind, testCase)
+			t.Errorf(compareTemplate, testCase.Expected, w.Body.Bytes())
 		}
 	}
 }
 
 func testCalcHandler200(t *testing.T) {
-	// TODO проверка, что выражение добавлено
+	t.Cleanup(func() {
+		exprsList = backend.ExpressionListEmptyFabric()
+	})
 	var (
-		requestsToTest = []backend.RequestJson{{"2+2*4"}, {"4*2+3"}, {"8+2/3"},
-			{"8+3/4*(110+43)-54"}, {""}, {"12"}}
-		expectedResponses = []*backend.Expression{{ID: 0}, {ID: 1}, {ID: 2}, {ID: 3},
-			{ID: 4}, {ID: 5}}
-		commonHttpCase = backend.HttpCases[backend.RequestJson, *backend.Expression]{RequestsToSend: requestsToTest,
+		requestsToTest    = []backend.RequestJson{{"2+2*4"}, {"4*2+3*5"}}
+		expectedResponses = []*backend.Expression{{ID: 0}, {ID: 1}}
+		commonHttpCase    = backend.HttpCases[backend.RequestJson, *backend.Expression]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/calculate",
 			ExpectedHttpCode: http.StatusOK}
 	)
-	runTestThroughHandler(calcHandler, t, commonHttpCase)
+	testThroughHandler(calcHandler, t, commonHttpCase)
+
+	var (
+		expectedLen   = len(expectedResponses)
+		expectedTasks = [][]backend.Task{{{PairID: 0, Arg1: 2, Arg2: 4, Operation: "*", Status: backend.ReadyToCalc},
+			{PairID: 1, Arg2: 2, Operation: "*", Status: backend.WaitingOtherTasks}}, {{PairID: 2, Arg1: 4, Arg2: 2,
+			Operation: "*", Status: backend.ReadyToCalc}, {PairID: 3, Arg2: 3, Operation: "*",
+			Status: backend.WaitingOtherTasks}, {PairID: 5, Arg2: 4, Operation: "*", Status: backend.WaitingOtherTasks}},
+		}
+	)
+
+	for exprInd, expr := range exprsList.GetAllExprs() {
+		var tasksListLen = expr.TasksHandler.Len()
+		assert.Equal(t, tasksListLen, expectedLen)
+		for taskInd := 0; taskInd < tasksListLen; taskInd++ {
+			task := expr.TasksHandler.Get(taskInd)
+			assert.Equal(t, task.PairID, expectedTasks[exprInd][taskInd].PairID)
+			assert.Equal(t, task.Arg1, expectedTasks[exprInd][taskInd].Arg1)
+			assert.Equal(t, task.Arg2, expectedTasks[exprInd][taskInd].Arg2)
+			assert.Equal(t, task.Operation, expectedTasks[exprInd][taskInd].Operation)
+		}
+	}
 }
 
 func testCalcHandler422(t *testing.T) {
@@ -105,7 +126,7 @@ func testCalcHandler422(t *testing.T) {
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/calculate",
 			ExpectedHttpCode: http.StatusUnprocessableEntity}
 	)
-	runTestThroughHandler(calcHandler, t, commonHttpCase)
+	testThroughHandler(calcHandler, t, commonHttpCase)
 }
 
 func testCalcHandlerGet(t *testing.T) {
@@ -116,13 +137,10 @@ func testCalcHandlerGet(t *testing.T) {
 			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/calculate",
 			ExpectedHttpCode: http.StatusOK}
 	)
-	runTestThroughHandler(calcHandler, t, commonHttpCase)
+	testThroughHandler(calcHandler, t, commonHttpCase)
 }
 
 func TestCalcHandler(t *testing.T) {
-	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
-	})
 	t.Run("TestCalcHandler200", testCalcHandler200)
 	t.Run("TestCalcHandler422", testCalcHandler422)
 	t.Run("TestCalcHandlerGet", testCalcHandlerGet)
@@ -144,7 +162,7 @@ func testExpressionsHandler200(t *testing.T) {
 		commonHttpCase    = backend.HttpCases[backend.EmptyJson, *backend.ExpressionsJsonTitle]{RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/expressions",
 			ExpectedHttpCode: http.StatusOK}
 	)
-	runTestThroughHandler(expressionsHandler, t, commonHttpCase)
+	testThroughHandler(expressionsHandler, t, commonHttpCase)
 }
 
 func testExpressionsHandlerPost(t *testing.T) {
@@ -162,7 +180,7 @@ func testExpressionsHandlerPost(t *testing.T) {
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/expressions",
 			ExpectedHttpCode: http.StatusOK}
 	)
-	runTestThroughHandler(expressionsHandler, t, commonHttpCase)
+	testThroughHandler(expressionsHandler, t, commonHttpCase)
 }
 
 func testExpressionsHandlerEmpty(t *testing.T) {
@@ -174,7 +192,7 @@ func testExpressionsHandlerEmpty(t *testing.T) {
 			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/expressions",
 			ExpectedHttpCode: http.StatusOK}
 	)
-	runTestThroughHandler(expressionsHandler, t, commonHttpCase)
+	testThroughHandler(expressionsHandler, t, commonHttpCase)
 
 }
 
@@ -203,7 +221,7 @@ func testExpressionIdHandler200(t *testing.T) {
 					UrlTemplate: "/api/v1/expressions/{ID}", UrlTarget: fmt.Sprintf("/api/v1/expressions/%d", ind),
 					ExpectedHttpCode: http.StatusOK}
 			)
-			runTestThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
+			testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
 		})
 	}
 }
@@ -224,7 +242,7 @@ func testExpressionIdHandler404(t *testing.T) {
 			UrlTemplate: "/api/v1/expressions/{ID}", UrlTarget: "/api/v1/expressions/1",
 			ExpectedHttpCode: http.StatusNotFound}
 	)
-	runTestThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
+	testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
 }
 
 func testExpressionIdHandlerPost(t *testing.T) {
@@ -243,7 +261,7 @@ func testExpressionIdHandlerPost(t *testing.T) {
 			UrlTemplate: "/api/v1/expressions/{ID}", UrlTarget: "/api/v1/expressions/0",
 			ExpectedHttpCode: http.StatusOK}
 	)
-	runTestThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
+	testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
 }
 
 func testExpressionIdHandlerEmpty(t *testing.T) {
@@ -256,7 +274,7 @@ func testExpressionIdHandlerEmpty(t *testing.T) {
 			UrlTemplate: "/api/v1/expressions/{ID}", UrlTarget: "/api/v1/expressions/0",
 			ExpectedHttpCode: http.StatusNotFound}
 	)
-	runTestThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
+	testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
 }
 
 func TestExpressionIdHandler(t *testing.T) {
@@ -284,7 +302,7 @@ func testTaskGetHandler200(t *testing.T) {
 			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/internal/task",
 			ExpectedHttpCode: http.StatusOK}
 	)
-	runTestThroughHandler(taskHandler, t, commonHttpCase)
+	testThroughHandler(taskHandler, t, commonHttpCase)
 }
 
 func testTaskGetHandlerEmpty404(t *testing.T) {
@@ -296,7 +314,7 @@ func testTaskGetHandlerEmpty404(t *testing.T) {
 			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/internal/task",
 			ExpectedHttpCode: http.StatusNotFound}
 	)
-	runTestThroughHandler(taskHandler, t, commonHttpCase)
+	testThroughHandler(taskHandler, t, commonHttpCase)
 }
 
 func testTaskGetHandler404(t *testing.T) {
@@ -322,8 +340,8 @@ func testTaskGetHandler404(t *testing.T) {
 			ExpectedResponses: expectedResponses2, HttpMethod: "GET", UrlTarget: "/internal/task",
 			ExpectedHttpCode: http.StatusNotFound}
 	)
-	runTestThroughHandler(taskHandler, t, commonHttpCase)
-	runTestThroughHandler(taskHandler, t, commonHttpCase2)
+	testThroughHandler(taskHandler, t, commonHttpCase)
+	testThroughHandler(taskHandler, t, commonHttpCase2)
 }
 
 func testTaskPostHandler200(t *testing.T) {
@@ -343,7 +361,7 @@ func testTaskPostHandler200(t *testing.T) {
 	stubTask := stubExpr.TasksHandler.Get(0)
 	stubTask.ChangeStatus(backend.Sent)
 
-	runTestThroughHandler(taskHandler, t, commonHttpCase)
+	testThroughHandler(taskHandler, t, commonHttpCase)
 
 	if stubExpr.Result != 6 {
 		t.Errorf("Ожидается Result %d по Expression %d, получен %d", 6, stubExpr.ID, stubExpr.Result)
@@ -359,7 +377,7 @@ func testTaskPostHandler404(t *testing.T) {
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/internal/task",
 			ExpectedHttpCode: http.StatusNotFound}
 	)
-	runTestThroughHandler(taskHandler, t, commonHttpCase)
+	testThroughHandler(taskHandler, t, commonHttpCase)
 }
 
 type RandomJson struct {
@@ -381,7 +399,7 @@ func testTaskPostHandler422(t *testing.T) {
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/internal/task",
 			ExpectedHttpCode: http.StatusUnprocessableEntity}
 	)
-	runTestThroughHandler(taskHandler, t, commonHttpCase)
+	testThroughHandler(taskHandler, t, commonHttpCase)
 }
 
 func TestTaskHandler(t *testing.T) {

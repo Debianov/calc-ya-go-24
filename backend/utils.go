@@ -58,15 +58,15 @@ func (t *Tasks) registerFirst() (task *Task) {
 		if t.updatedTasksCountBeforeWaitingTask == t.tasksCountBeforeWaitingTask { // цикл в
 			// горутине не требуется, поскольку агент будут самостоятельно тыкать в сервер, чтоб тот проверил на
 			// наличие свободных таск
-			if _, ok := task.Arg2.(string); ok == true {
+			if _, ok := task.Arg2.(string); ok != true {
 				expectedTask = *t.Get(0)
 				t.delete(0)
-				task.Arg2 = int64(expectedTask.result)
+				task.Arg2 = int64(expectedTask.Result)
 			}
-			if _, ok := task.Arg1.(string); ok == true {
+			if _, ok := task.Arg1.(string); ok != true {
 				expectedTask = *t.Get(0)
 				t.delete(0)
-				task.Arg1 = int64(expectedTask.result)
+				task.Arg1 = int64(expectedTask.Result)
 			}
 			task.ChangeStatus(ReadyToCalc)
 			t.updatedTasksCountBeforeWaitingTask = 0
