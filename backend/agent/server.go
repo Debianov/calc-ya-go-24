@@ -1,4 +1,4 @@
-package agent
+package main
 
 import "github.com/Debianov/calc-ya-go-24/backend/orchestrator"
 

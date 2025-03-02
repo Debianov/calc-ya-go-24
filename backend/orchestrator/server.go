@@ -1,4 +1,4 @@
-package orchestrator
+package main
 
 func StartServer() (err error) {
 	s := GetDefaultServer(getHandler())
