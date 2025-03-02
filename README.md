@@ -2,7 +2,7 @@
 частей выражения.
 
 # Развёртывание
-`git https://github.com/Debianov/calc-ya-go-24.git`
+`git clone https://github.com/Debianov/calc-ya-go-24.git`
 
 В `config.go` в строке `return &http.Server{Addr: "127.0.0.1:8000", Handler: handler}` может быть изменён адрес `Addr`
 на любой желаемый.

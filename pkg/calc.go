@@ -6,38 +6,16 @@ import (
 	"strings"
 )
 
-type Stack[T any] struct {
-	buf []T
-}
-
-func (s *Stack[T]) len() int {
-	return len(s.buf)
-}
-
-func (s *Stack[T]) push(element T) {
-	s.buf = append(s.buf, element)
-}
-
-func (s *Stack[T]) getLast() T {
-	return s.buf[len(s.buf)-1]
-}
-
-func (s *Stack[T]) pop() T {
-	result := s.getLast()
-	s.buf = s.buf[:len(s.buf)-1]
-	return result
-}
-
-func Calc(expression string) (float64, error) {
+func GeneratePostfix(expression string) (result []string, isValid bool) {
 	if len(expression) == 0 {
-		return 0, nil
+		return nil, true
 	}
 	tokens := tokenize(expression)
 	postfix, err := translateToPostfix(tokens)
 	if err != nil {
-		return 0, err
+		return nil, false
 	}
-	return evaluatePostfix(postfix)
+	return postfix, true
 }
 
 func tokenize(expr string) []string {
@@ -71,7 +49,7 @@ func tokenize(expr string) []string {
 func translateToPostfix(tokens []string) ([]string, error) {
 	var (
 		output              []string
-		operators           = Stack[string]{make([]string, 0)}
+		operators           = StackFabric[string]()
 		operandCount        int
 		operatorCount       int
 		firstMustBeOperator bool // после любой ) должен идти только оператор. С помощью этого флага мы будем проверять
@@ -79,93 +57,82 @@ func translateToPostfix(tokens []string) ([]string, error) {
 	)
 
 	for _, token := range tokens {
-		if isNumber(token) {
+		if IsNumber(token) {
 			if firstMustBeOperator {
-				return nil, invalidExpression
+				return nil, InvalidExpression
 			}
 			output = append(output, token)
 			operandCount++
 		} else if token == "(" {
 			if firstMustBeOperator {
-				return nil, invalidExpression
+				return nil, InvalidExpression
 			}
-			operators.push(token)
+			operators.Push(token)
 		} else if token == ")" {
-			for operators.len() > 0 && operators.getLast() != "(" {
-				output = append(output, operators.pop())
+			for operators.Len() > 0 && operators.GetLast() != "(" {
+				output = append(output, operators.Pop())
 			}
-			if operators.len() == 0 {
+			if operators.Len() == 0 {
 				return nil, mismatchedParentheses
 			}
 			firstMustBeOperator = true
-			operators.pop()
-		} else if isOperator(token) {
+			operators.Pop()
+		} else if IsOperator(token) {
 			if firstMustBeOperator {
 				firstMustBeOperator = false
 			}
-			for operators.len() > 0 && getPriority(operators.getLast()) >= getPriority(token) {
-				output = append(output, operators.pop())
+			for operators.Len() > 0 && getPriority(operators.GetLast()) >= getPriority(token) {
+				output = append(output, operators.Pop())
 			}
-			operators.push(token)
+			operators.Push(token)
 			operatorCount++
 		} else {
 			return nil, errors.New("invalid operator/operand")
 		}
 	}
 
-	for operators.len() > 0 {
-		if operators.getLast() == "(" {
+	for operators.Len() > 0 {
+		if operators.GetLast() == "(" {
 			return nil, mismatchedParentheses
 		}
-		output = append(output, operators.pop())
+		output = append(output, operators.Pop())
 	}
 
 	if operatorCount != operandCount-1 {
-		return nil, invalidExpression
+		return nil, InvalidExpression
 	}
 
 	return output, nil
 }
 
-func evaluatePostfix(postfix []string) (float64, error) {
-	var stack = Stack[float64]{make([]float64, 0)}
+func EvaluatePostfix(postfix []string) (float64, error) {
+	var stack = Stack[float64]{buf: make([]float64, 0)}
 
 	for _, token := range postfix {
-		if isNumber(token) {
+		if IsNumber(token) {
 			num, _ := strconv.ParseFloat(token, 64)
-			stack.push(num)
-		} else if isOperator(token) {
-			b := stack.pop()
-			a := stack.pop()
+			stack.Push(num)
+		} else if IsOperator(token) {
+			b := stack.Pop()
+			a := stack.Pop()
 
 			switch token {
 			case "+":
-				stack.push(a + b)
+				stack.Push(a + b)
 			case "-":
-				stack.push(a - b)
+				stack.Push(a - b)
 			case "*":
-				stack.push(a * b)
+				stack.Push(a * b)
 			case "/":
 				if b == 0 {
 					return 0, errors.New("division by zero")
 				}
-				stack.push(a / b)
+				stack.Push(a / b)
 			}
 		}
 	}
 
-	return stack.getLast(), nil
-}
-
-func isNumber(token string) bool {
-	if _, err := strconv.ParseFloat(token, 64); err == nil {
-		return true
-	}
-	return false
-}
-
-func isOperator(token string) bool {
-	return token == "+" || token == "-" || token == "*" || token == "/"
+	return stack.GetLast(), nil
 }
 
 func getPriority(op string) int {
