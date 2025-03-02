@@ -6,60 +6,65 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Debianov/calc-ya-go-24/backend"
+	"io"
 	"log"
 	"net/http"
 )
 
 type Agent struct {
 	ServerURL string // запись данных полей производится один раз, редактирование не предусматривается. Синхронизация
-	// не требуется
+	// горутин не требуется.
 	getEndpoint  string
 	sendEndpoint string
 }
 
-func (a *Agent) get() (structInResp *backend.Task, ok bool) {
+func (a *Agent) get() (result *backend.Task, ok bool) {
 	var err error
-	resp, err := http.Get(a.ServerURL)
+	resp, err := http.Get(a.ServerURL + a.getEndpoint)
 	if err != nil {
 		log.Panic(err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		ok = false
 		return
+	} else {
+		ok = true
 	}
 	var (
-		reqBuf []byte
+		reqBuf = make([]byte, resp.ContentLength)
 	)
 	_, err = resp.Body.Read(reqBuf)
+	if err != nil && err != io.EOF {
+		log.Panic(err)
+	}
+	var structInResp backend.TaskToSend
+	err = json.Unmarshal(reqBuf, &structInResp)
 	if err != nil {
 		log.Panic(err)
 	}
-	err = json.Unmarshal(reqBuf, structInResp)
-	if err != nil {
-		log.Panic(err)
-	}
+	result = structInResp.Task
 	return
 }
 
 func (a *Agent) calc(task backend.Task) (agentResult backend.AgentResult, err error) {
-	var result int64
+	var result float64
 	agentResult = backend.AgentResult{
 		ID: task.PairID,
 	}
 	switch task.Operation {
 	case "+":
-		result = task.Arg1.(int64) + task.Arg2.(int64)
+		result = task.Arg1.(float64) + task.Arg2.(float64)
 	case "-":
-		result = task.Arg1.(int64) - task.Arg2.(int64)
+		result = task.Arg1.(float64) - task.Arg2.(float64)
 	case "*":
-		result = task.Arg1.(int64) * task.Arg2.(int64)
+		result = task.Arg1.(float64) * task.Arg2.(float64)
 	case "/":
-		result = task.Arg1.(int64) / task.Arg2.(int64)
+		result = task.Arg1.(float64) / task.Arg2.(float64)
 	default:
 		err = errors.New("неизвестная операция")
 		return
 	}
-	agentResult.Result = result
+	agentResult.Result = int64(result)
 	return
 }
 

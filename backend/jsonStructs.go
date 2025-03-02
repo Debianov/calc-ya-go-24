@@ -41,7 +41,7 @@ func (r RequestNilJson) Marshal() (result []byte, err error) {
 }
 
 type OKJson struct {
-	Result float64 `json:"Result"`
+	Result float64 `json:"result"`
 }
 
 func (o OKJson) Marshal() (result []byte, err error) {
@@ -92,11 +92,11 @@ func (t *TaskToSend) Marshal() (result []byte, err error) {
 }
 
 type Expression struct {
-	Postfix      []string
+	postfix      []string
 	ID           int        `json:"id"`
-	Status       ExprStatus `json:"Status"`
-	Result       int64      `json:"Result"`
-	TasksHandler *Tasks
+	Status       ExprStatus `json:"status"`
+	Result       int64      `json:"result"`
+	tasksHandler *Tasks
 	mut          sync.Mutex
 }
 
@@ -105,7 +105,7 @@ func (e *Expression) DivideIntoTasks() {
 		operatorCount int
 		stack         = pkg.StackFabric[int64]()
 	)
-	for _, r := range e.Postfix { // TODO: сделать структуру в постфиксе, уже распарсенную. нам останется пройтись
+	for _, r := range e.postfix { // TODO: сделать структуру в постфиксе, уже распарсенную. нам останется пройтись
 		// TODO по ней слева направо и записать всё в порядке <оператор, операнд, операнд>.
 		if pkg.IsNumber(r) {
 			operandInInt, err := strconv.ParseInt(r, 10, 64)
@@ -128,7 +128,7 @@ func (e *Expression) DivideIntoTasks() {
 				newTask = &Task{PairID: newId, Operation: r, OperationTime: e.getOperationTime(r),
 					Status: WaitingOtherTasks}
 			}
-			e.TasksHandler.add(newTask)
+			e.tasksHandler.add(newTask)
 			operatorCount++
 		}
 	}
@@ -162,14 +162,14 @@ func (e *Expression) getOperationTime(currentOperator string) (result time.Durat
 }
 
 func (e *Expression) FabricReadyExprSendTask() TaskToSend {
-	maybeReadyTask := e.TasksHandler.registerFirst()
+	maybeReadyTask := e.tasksHandler.registerFirst()
 	if maybeReadyTask.IsReadyToCalc() {
-		if e.TasksHandler.Len() == 1 {
+		if e.tasksHandler.Len() == 1 {
 			e.changeStatus(NoReadyTasks)
 		} else {
 			e.changeStatus(Ready)
 		}
-		taskToSend := e.TasksHandler.TaskToSendFabricAdd(maybeReadyTask, time.Now())
+		taskToSend := e.tasksHandler.TaskToSendFabricAdd(maybeReadyTask, time.Now())
 		return taskToSend
 	} else {
 		e.changeStatus(NoReadyTasks)
@@ -196,12 +196,14 @@ func (e *Expression) Marshal() (result []byte, err error) {
 }
 
 func (e *Expression) MarshalID() (result []byte, err error) {
-	result, err = json.Marshal(&Expression{ID: e.ID})
+	result, err = json.Marshal(&struct {
+		ID int `json:"id"`
+	}{ID: e.ID})
 	return
 }
 
 func (e *Expression) WriteResultIntoTask(taskID int, result int64, timeAtReceiveTask time.Time) (err error) {
-	task, timeAtSendingTask, ok := e.TasksHandler.getSentTask(taskID)
+	task, timeAtSendingTask, ok := e.tasksHandler.popSentTask(taskID)
 	if !ok {
 		return TaskIDNotExist{taskID}
 	}
@@ -214,10 +216,11 @@ func (e *Expression) WriteResultIntoTask(taskID int, result int64, timeAtReceive
 	if err != nil {
 		log.Panic(err)
 	}
-	e.TasksHandler.CountUpdatedTask()
-	if e.TasksHandler.Len() == 1 {
+	e.tasksHandler.CountUpdatedTask()
+	//if tasksHandler.UpdatedAll
+	if e.tasksHandler.Len() == 1 {
 		e.changeStatus(Completed)
-		e.writeResult(task.Result)
+		e.writeResult(task.result)
 	}
 	return
 }
@@ -226,6 +229,10 @@ func (e *Expression) writeResult(result int64) {
 	e.mut.Lock()
 	defer e.mut.Unlock()
 	e.Result = result
+}
+
+func (e *Expression) GetTasksHandler() *Tasks {
+	return e.tasksHandler
 }
 
 type ExpressionsJsonTitle struct {
@@ -261,16 +268,31 @@ type Task struct {
 	Arg2          interface{}   `json:"arg2"`
 	Operation     string        `json:"operation"`
 	OperationTime time.Duration `json:"operationTime"`
-	Result        int64
+	result        int64
 	Status        TaskStatus
 	mut           sync.Mutex
+}
+
+func (t *Task) Marshal() (result []byte, err error) {
+	result, err = json.Marshal(&struct { // нужно отфильтровать публичные атрибуты (t.Status), поскольку
+		// Marshal их распарсит, даже несмотря на отсутствие дополнительного поля формата `json:""`.
+		PairID        int           `json:"id"`
+		Arg1          interface{}   `json:"arg1"`
+		Arg2          interface{}   `json:"arg2"`
+		Operation     string        `json:"operation"`
+		OperationTime time.Duration `json:"operationTime"`
+	}{t.PairID, t.Arg1, t.Arg2, t.Operation, t.OperationTime})
+	if err != nil {
+		log.Panic(err)
+	}
+	return
 }
 
 func (t *Task) WriteResult(result int64) error {
 	t.mut.Lock()
 	defer t.mut.Unlock()
 	if t.Status == Sent {
-		t.Result = result
+		t.result = result
 		t.Status = Calculated
 	} else if t.Status == Calculated {
 		return errors.New("BUG: разработчиком ожидается, что результат одной и той же задачи не может быть записан" +
@@ -296,7 +318,7 @@ func (t *Task) IsReadyToCalc() bool {
 
 type AgentResult struct {
 	ID     int   `json:"ID"`
-	Result int64 `json:"Result"`
+	Result int64 `json:"result"`
 }
 
 func (a *AgentResult) Marshal() (result []byte, err error) {

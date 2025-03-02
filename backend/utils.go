@@ -3,7 +3,6 @@ package backend
 import (
 	"iter"
 	"maps"
-	"slices"
 	"sync"
 	"time"
 )
@@ -36,7 +35,7 @@ func (t *Tasks) Get(ind int) *Task {
 func (t *Tasks) delete(ind int) {
 	t.mut.Lock()
 	defer t.mut.Unlock()
-	slices.Delete(t.buf, ind, ind+1)
+	t.buf = append(t.buf[:ind], t.buf[ind+1:]...)
 }
 
 func (t *Tasks) Len() int {
@@ -58,19 +57,48 @@ func (t *Tasks) registerFirst() (task *Task) {
 		if t.updatedTasksCountBeforeWaitingTask == t.tasksCountBeforeWaitingTask { // цикл в
 			// горутине не требуется, поскольку агент будут самостоятельно тыкать в сервер, чтоб тот проверил на
 			// наличие свободных таск
-			if _, ok := task.Arg2.(string); ok != true {
-				expectedTask = *t.Get(0)
-				t.delete(0)
-				task.Arg2 = int64(expectedTask.Result)
-			}
-			if _, ok := task.Arg1.(string); ok != true {
-				expectedTask = *t.Get(0)
-				t.delete(0)
-				task.Arg1 = int64(expectedTask.Result)
+			switch t.tasksCountBeforeWaitingTask {
+			case 1:
+				if _, ok := task.Arg1.(string); ok != true {
+					expectedTask = *t.Get(0)
+					t.delete(0)
+					task.Arg1 = expectedTask.result
+				}
+				t.updatedTasksCountBeforeWaitingTask = 0
+				t.tasksCountBeforeWaitingTask = 0
+			case 2:
+				if _, ok := task.Arg1.(string); ok != true {
+					expectedTask = *t.Get(0)
+					t.delete(0)
+					task.Arg1 = expectedTask.result
+				}
+				if _, ok := task.Arg2.(string); ok != true {
+					expectedTask = *t.Get(0)
+					t.delete(0)
+					task.Arg2 = expectedTask.result
+				}
+				t.updatedTasksCountBeforeWaitingTask = 0
+				t.tasksCountBeforeWaitingTask = 0
+			default:
+				if t.tasksCountBeforeWaitingTask < 3 {
+					break
+				}
+				calculatedTaskOffset := t.tasksCountBeforeWaitingTask
+				if _, ok := task.Arg2.(string); ok != true {
+					expectedTask = *t.Get(calculatedTaskOffset - 1)
+					t.delete(calculatedTaskOffset - 1)
+					task.Arg2 = expectedTask.result
+				}
+				if _, ok := task.Arg1.(string); ok != true {
+					expectedTask = *t.Get(calculatedTaskOffset - 2)
+					t.delete(calculatedTaskOffset - 2)
+					task.Arg1 = expectedTask.result
+				}
+				t.updatedTasksCountBeforeWaitingTask = t.updatedTasksCountBeforeWaitingTask - 2
+				t.tasksCountBeforeWaitingTask = t.tasksCountBeforeWaitingTask - 2 + 1 // -2 удалённых и +1 текущий, который
+				// теперь ReadyToCalc.
 			}
 			task.ChangeStatus(ReadyToCalc)
-			t.updatedTasksCountBeforeWaitingTask = 0
-			t.tasksCountBeforeWaitingTask = 0
 		}
 		return
 	}
@@ -99,7 +127,7 @@ func (t *sentTasks) TaskToSendFabricAdd(readyTask *Task, timeAtSendingTask time.
 	return
 }
 
-func (t *sentTasks) getSentTask(taskId int) (*Task, time.Time, bool) {
+func (t *sentTasks) popSentTask(taskId int) (*Task, time.Time, bool) {
 	t.mut.Lock()
 	taskWithTimer, ok := t.buf[taskId]
 	if ok {
@@ -128,7 +156,7 @@ type ExpressionsList struct {
 func (e *ExpressionsList) ExprFabricAdd(postfix []string) (newExpr *Expression, newId int) {
 	newId = e.generateId()
 	newTaskSpace := TasksFabric()
-	newExpr = &Expression{Postfix: postfix, ID: newId, Status: Ready, TasksHandler: newTaskSpace}
+	newExpr = &Expression{postfix: postfix, ID: newId, Status: Ready, tasksHandler: newTaskSpace}
 	newExpr.DivideIntoTasks()
 	e.mut.Lock()
 	e.exprs[newId] = newExpr

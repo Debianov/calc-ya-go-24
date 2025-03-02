@@ -7,24 +7,35 @@
 В `config.go` в строке `return &http.Server{Addr: "127.0.0.1:8000", Handler: handler}` может быть изменён адрес `Addr`
 на любой желаемый.
 
-TODO Docker?
-
-# Запуск и использование
+# Запуск
 Запуск: `go run main.go`
 
-Все запросы выполняются в формате json с методом "POST":
+# Использование
 ```shell
 curl --location 'localhost:8000/api/v1/calculate' \
 --header 'Content-Type: application/json' \
 --data '{
-  "expression": "2*2" 
+  "expression": "2+2*2" 
 }'
 ```
 ```shell
-curl --location 'localhost:8000/api/v1/calculate' \ 
+curl --location 'localhost:8000/api/v1/expressions'
+```
+
+```shell
+curl --location 'localhost:8000/api/v1/expressions/id'
+```
+
+```shell
+curl --location 'localhost:8000/internal/task'
+```
+
+```shell
+curl --location 'localhost:8000/internal/task' \
 --header 'Content-Type: application/json' \
 --data '{
-  "expression": "2*2+(23+87)"
+  "id": 0,
+  "result": 2.5
 }'
 ```
 
