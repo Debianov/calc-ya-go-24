@@ -160,7 +160,8 @@ func taskPostHandler(w http.ResponseWriter, r *http.Request) {
 	)
 	err = json.Unmarshal(reqBuf, &reqInJson)
 	if err != nil {
-		w.WriteHeader(422)
+		log.Panic(err)
+		//w.WriteHeader(422) // TODO проверка структуры
 	}
 	exprId, taskId := pkg.Unpair(reqInJson.ID)
 	expr, ok := exprsList.Get(exprId)

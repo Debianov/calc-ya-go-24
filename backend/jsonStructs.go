@@ -102,8 +102,8 @@ type Expression struct {
 
 func (e *Expression) DivideIntoTasks() {
 	var (
-		operandsBeforeOperand []int64
-		operatorCount         int
+		operatorCount int
+		stack         = pkg.StackFabric[int64]()
 	)
 	for _, r := range e.Postfix { // TODO: сделать структуру в постфиксе, уже распарсенную. нам останется пройтись
 		// TODO по ней слева направо и записать всё в порядке <оператор, операнд, операнд>.
@@ -112,23 +112,23 @@ func (e *Expression) DivideIntoTasks() {
 			if err != nil {
 				log.Panic(err)
 			}
-			operandsBeforeOperand = append(operandsBeforeOperand, operandInInt)
+			stack.Push(operandInInt)
 		} else if pkg.IsOperator(r) {
 			var (
 				newId   = e.generateId(operatorCount)
 				newTask *Task
 			)
-			if len(operandsBeforeOperand) == 2 {
-				newTask = &Task{PairID: newId, Arg1: operandsBeforeOperand[0], Arg2: operandsBeforeOperand[1],
+			if stack.Len() >= 2 {
+				newTask = &Task{PairID: newId, Arg2: stack.Pop(), Arg1: stack.Pop(),
 					Operation: r, OperationTime: e.getOperationTime(r), Status: ReadyToCalc}
-			} else if len(operandsBeforeOperand) == 1 {
-				newTask = &Task{PairID: newId, Arg2: operandsBeforeOperand[0], Operation: r,
+			} else if stack.Len() == 1 {
+				newTask = &Task{PairID: newId, Arg2: stack.Pop(), Operation: r,
 					OperationTime: e.getOperationTime(r), Status: WaitingOtherTasks}
 			} else {
-				newTask = &Task{PairID: newId, Operation: r, OperationTime: e.getOperationTime(r), Status: WaitingOtherTasks}
+				newTask = &Task{PairID: newId, Operation: r, OperationTime: e.getOperationTime(r),
+					Status: WaitingOtherTasks}
 			}
 			e.TasksHandler.add(newTask)
-			operandsBeforeOperand = make([]int64, 0)
 			operatorCount++
 		}
 	}

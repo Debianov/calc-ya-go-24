@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -97,16 +98,25 @@ func testCalcHandler200(t *testing.T) {
 
 	var (
 		expectedLen   = len(expectedResponses)
-		expectedTasks = [][]backend.Task{{{PairID: 0, Arg1: 2, Arg2: 4, Operation: "*", Status: backend.ReadyToCalc},
-			{PairID: 1, Arg2: 2, Operation: "*", Status: backend.WaitingOtherTasks}}, {{PairID: 2, Arg1: 4, Arg2: 2,
-			Operation: "*", Status: backend.ReadyToCalc}, {PairID: 3, Arg2: 3, Operation: "*",
-			Status: backend.WaitingOtherTasks}, {PairID: 5, Arg2: 4, Operation: "*", Status: backend.WaitingOtherTasks}},
+		expectedTasks = [][]backend.Task{{{PairID: 0, Arg1: int64(2), Arg2: int64(4), Operation: "*",
+			Status: backend.ReadyToCalc}, {PairID: 1, Arg2: int64(2), Operation: "+", Status: backend.WaitingOtherTasks}},
+			{{PairID: 2, Arg1: int64(4), Arg2: int64(2), Operation: "*", Status: backend.ReadyToCalc}, {PairID: 3,
+				Arg1: int64(3), Arg2: int64(5), Operation: "*", Status: backend.ReadyToCalc},
+				{PairID: 5, Operation: "+", Status: backend.WaitingOtherTasks}},
 		}
 	)
 
-	for exprInd, expr := range exprsList.GetAllExprs() {
+	exprs := exprsList.GetAllExprs()
+	slices.SortFunc(exprs, func(expression *backend.Expression, expression2 *backend.Expression) int {
+		if expression.ID >= expression2.ID {
+			return 0
+		} else {
+			return -1
+		}
+	})
+	assert.Equal(t, len(exprs), expectedLen)
+	for exprInd, expr := range exprs {
 		var tasksListLen = expr.TasksHandler.Len()
-		assert.Equal(t, tasksListLen, expectedLen)
 		for taskInd := 0; taskInd < tasksListLen; taskInd++ {
 			task := expr.TasksHandler.Get(taskInd)
 			assert.Equal(t, task.PairID, expectedTasks[exprInd][taskInd].PairID)
