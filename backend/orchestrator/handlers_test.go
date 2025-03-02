@@ -83,16 +83,25 @@ func testThroughServeMux[K, V backend.JsonPayload](handler func(w http.ResponseW
 	}
 }
 
-func testCalcHandler200(t *testing.T) {
+type ExpressionStub struct {
+	ID int `json:"id"`
+}
+
+func (e ExpressionStub) Marshal() (result []byte, err error) {
+	result, err = json.Marshal(&e)
+	return
+}
+
+func testCalcHandler201(t *testing.T) {
 	t.Cleanup(func() {
 		exprsList = backend.ExpressionListEmptyFabric()
 	})
 	var (
 		requestsToTest    = []backend.RequestJson{{"2+2*4"}, {"4*2+3*5"}}
-		expectedResponses = []*backend.Expression{{ID: 0}, {ID: 1}}
-		commonHttpCase    = backend.HttpCases[backend.RequestJson, *backend.Expression]{RequestsToSend: requestsToTest,
+		expectedResponses = []*ExpressionStub{{ID: 0}, {ID: 1}}
+		commonHttpCase    = backend.HttpCases[backend.RequestJson, *ExpressionStub]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/calculate",
-			ExpectedHttpCode: http.StatusOK}
+			ExpectedHttpCode: http.StatusCreated}
 	)
 	testThroughHandler(calcHandler, t, commonHttpCase)
 
@@ -116,9 +125,9 @@ func testCalcHandler200(t *testing.T) {
 	})
 	assert.Equal(t, len(exprs), expectedLen)
 	for exprInd, expr := range exprs {
-		var tasksListLen = expr.TasksHandler.Len()
+		var tasksListLen = expr.GetTasksHandler().Len()
 		for taskInd := 0; taskInd < tasksListLen; taskInd++ {
-			task := expr.TasksHandler.Get(taskInd)
+			task := expr.GetTasksHandler().Get(taskInd)
 			assert.Equal(t, task.PairID, expectedTasks[exprInd][taskInd].PairID)
 			assert.Equal(t, task.Arg1, expectedTasks[exprInd][taskInd].Arg1)
 			assert.Equal(t, task.Arg2, expectedTasks[exprInd][taskInd].Arg2)
@@ -151,7 +160,7 @@ func testCalcHandlerGet(t *testing.T) {
 }
 
 func TestCalcHandler(t *testing.T) {
-	t.Run("TestCalcHandler200", testCalcHandler200)
+	t.Run("TestCalcHandler201", testCalcHandler201)
 	t.Run("TestCalcHandler422", testCalcHandler422)
 	t.Run("TestCalcHandlerGet", testCalcHandlerGet)
 }
@@ -368,13 +377,13 @@ func testTaskPostHandler200(t *testing.T) {
 	)
 	stubExpr := exprsList.GetReadyExpr()
 	stubExpr.FabricReadyExprSendTask()
-	stubTask := stubExpr.TasksHandler.Get(0)
+	stubTask := stubExpr.GetTasksHandler().Get(0)
 	stubTask.ChangeStatus(backend.Sent)
 
 	testThroughHandler(taskHandler, t, commonHttpCase)
 
 	if stubExpr.Result != 6 {
-		t.Errorf("Ожидается Result %d по Expression %d, получен %d", 6, stubExpr.ID, stubExpr.Result)
+		t.Errorf("Ожидается result %d по Expression %d, получен %d", 6, stubExpr.ID, stubExpr.Result)
 	}
 }
 
@@ -413,6 +422,11 @@ func testTaskPostHandler422(t *testing.T) {
 }
 
 func TestTaskHandler(t *testing.T) {
+	t.Setenv("TIME_ADDITION_MS", "1s")
+	t.Setenv("TIME_SUBTRACTION_MS", "1s")
+	t.Setenv("TIME_MULTIPLICATIONS_MS", "1s")
+	t.Setenv("TIME_DIVISIONS_MS", "1s")
+
 	t.Run("TestTaskGetHandler200", testTaskGetHandler200)
 	t.Run("TestTaskGetHandlerEmpty404", testTaskGetHandlerEmpty404)
 	t.Run("TestTaskGetHandler404", testTaskGetHandler404)

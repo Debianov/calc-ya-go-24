@@ -49,11 +49,11 @@ func calcHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Panic(err)
 	}
+	w.WriteHeader(201)
 	_, err = w.Write(marshaledExpr)
 	if err != nil {
 		log.Panic(err)
 	}
-	w.WriteHeader(201)
 }
 
 func expressionsHandler(w http.ResponseWriter, r *http.Request) {
@@ -152,7 +152,7 @@ func taskPostHandler(w http.ResponseWriter, r *http.Request) {
 		reqBuf = make([]byte, r.ContentLength)
 	)
 	_, err = r.Body.Read(reqBuf)
-	if err != nil {
+	if err != nil && err != io.EOF {
 		log.Panic(err)
 	}
 	var (
@@ -163,13 +163,13 @@ func taskPostHandler(w http.ResponseWriter, r *http.Request) {
 		log.Panic(err)
 		//w.WriteHeader(422) // TODO проверка структуры
 	}
-	exprId, taskId := pkg.Unpair(reqInJson.ID)
+	exprId, _ := pkg.Unpair(reqInJson.ID)
 	expr, ok := exprsList.Get(exprId)
 	if !ok {
 		w.WriteHeader(404)
 		return
 	}
-	err = expr.WriteResultIntoTask(taskId, reqInJson.Result, time.Now())
+	err = expr.WriteResultIntoTask(reqInJson.ID, reqInJson.Result, time.Now())
 	if err != nil {
 		if errors.Is(err, backend.TaskIDNotExist{}) {
 			w.WriteHeader(404)

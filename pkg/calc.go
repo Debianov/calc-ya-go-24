@@ -2,7 +2,6 @@ package pkg
 
 import (
 	"errors"
-	"strconv"
 	"strings"
 )
 
@@ -103,36 +102,6 @@ func translateToPostfix(tokens []string) ([]string, error) {
 	}
 
 	return output, nil
-}
-
-func EvaluatePostfix(postfix []string) (float64, error) {
-	var stack = Stack[float64]{buf: make([]float64, 0)}
-
-	for _, token := range postfix {
-		if IsNumber(token) {
-			num, _ := strconv.ParseFloat(token, 64)
-			stack.Push(num)
-		} else if IsOperator(token) {
-			b := stack.Pop()
-			a := stack.Pop()
-
-			switch token {
-			case "+":
-				stack.Push(a + b)
-			case "-":
-				stack.Push(a - b)
-			case "*":
-				stack.Push(a * b)
-			case "/":
-				if b == 0 {
-					return 0, errors.New("division by zero")
-				}
-				stack.Push(a / b)
-			}
-		}
-	}
-
-	return stack.GetLast(), nil
 }
 
 func getPriority(op string) int {
