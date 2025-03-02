@@ -95,7 +95,7 @@ type Expression struct {
 	Postfix      []string
 	ID           int        `json:"id"`
 	Status       ExprStatus `json:"Status"`
-	Result       int        `json:"Result"`
+	Result       int64      `json:"Result"`
 	TasksHandler *Tasks
 	mut          sync.Mutex
 }
@@ -200,7 +200,7 @@ func (e *Expression) MarshalID() (result []byte, err error) {
 	return
 }
 
-func (e *Expression) WriteResultIntoTask(taskID int, result int, timeAtReceiveTask time.Time) (err error) {
+func (e *Expression) WriteResultIntoTask(taskID int, result int64, timeAtReceiveTask time.Time) (err error) {
 	task, timeAtSendingTask, ok := e.TasksHandler.getSentTask(taskID)
 	if !ok {
 		return TaskIDNotExist{taskID}
@@ -222,7 +222,7 @@ func (e *Expression) WriteResultIntoTask(taskID int, result int, timeAtReceiveTa
 	return
 }
 
-func (e *Expression) writeResult(result int) {
+func (e *Expression) writeResult(result int64) {
 	e.mut.Lock()
 	defer e.mut.Unlock()
 	e.Result = result
@@ -261,12 +261,12 @@ type Task struct {
 	Arg2          interface{}   `json:"arg2"`
 	Operation     string        `json:"operation"`
 	OperationTime time.Duration `json:"operationTime"`
-	Result        int
+	Result        int64
 	Status        TaskStatus
 	mut           sync.Mutex
 }
 
-func (t *Task) WriteResult(result int) error {
+func (t *Task) WriteResult(result int64) error {
 	t.mut.Lock()
 	defer t.mut.Unlock()
 	if t.Status == Sent {
@@ -295,8 +295,8 @@ func (t *Task) IsReadyToCalc() bool {
 }
 
 type AgentResult struct {
-	ID     int `json:"ID"`
-	Result int `json:"Result"`
+	ID     int   `json:"ID"`
+	Result int64 `json:"Result"`
 }
 
 func (a *AgentResult) Marshal() (result []byte, err error) {

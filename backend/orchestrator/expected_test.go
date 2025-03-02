@@ -1,6 +1,6 @@
 // Тестирование случаев, предусмотренных ТЗ.
 
-package orchestrator
+package main
 
 import (
 	"bytes"
