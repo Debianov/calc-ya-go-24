@@ -34,7 +34,7 @@ COMPUTING_POWER
 
 Пример файла переменных в Linux:
 ```shell
-# filename: agent.env
+# filename: calc.env
 #!/bin/sh
 export TIME_ADDITION_MS=2s
 export TIME_SUBTRACTION_MS=2s
@@ -44,7 +44,7 @@ export COMPUTING_POWER=10
 ```
 
 Экспортирование переменных в Linux:
-`source agent.env`
+`source calc.env`
 
 # Запуск
 
