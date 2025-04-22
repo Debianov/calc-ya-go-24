@@ -1,6 +1,6 @@
 package main
 
-func StartServer() (err error) {
+func StartHttpServer() (err error) {
 	s := GetDefaultServer(getHandler())
 	err = s.ListenAndServe()
 	return

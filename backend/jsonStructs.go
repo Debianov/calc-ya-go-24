@@ -152,7 +152,7 @@ func (e *Expression) getOperationTime(currentOperator string) (result time.Durat
 	return
 }
 
-func (e *Expression) FabricReadyExprSendTask() TaskToSend {
+func (e *Expression) CallTaskToSendFabric() TaskToSend {
 	maybeReadyTask := e.tasksHandler.registerFirst()
 	if maybeReadyTask.IsReadyToCalc() {
 		if e.tasksHandler.Len() == 1 {

@@ -15,8 +15,8 @@ type TimeoutExecution struct {
 
 func (t TimeoutExecution) Error() string {
 	exprId, taskId := pkg.Unpair(t.pairId)
-	return fmt.Sprintf("возник timeout при обработке task: %d из expression %d, оператор: %s, время на выполнение: %s,"+
-		"фактически: %s", taskId, exprId, t.operation, t.operationTime, t.factTime)
+	return fmt.Sprintf("возник timeout при обработке task: %d из expression %d, оператор: %s; время на "+
+		"выполнение: %s,фактически: %s", taskId, exprId, t.operation, t.operationTime, t.factTime)
 }
 
 type TaskIDNotExist struct {

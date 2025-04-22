@@ -2,7 +2,7 @@ package main
 
 func main() {
 	var err error
-	err = StartServer()
+	err = StartHttpServer()
 	if err != nil {
 		panic(err)
 	}
