@@ -105,7 +105,7 @@ func (e *Expression) DivideIntoTasks() {
 		operatorCount int
 		stack         = pkg.StackFabric[int64]()
 	)
-	for _, r := range e.postfix { // TODO: сделать структуру в постфиксе, уже распарсенную. нам останется пройтись
+	for _, r := range e.postfix { // TODO: сделать структуру в постфиксе уже распарсеной. нам останется пройтись
 		// TODO по ней слева направо и записать всё в порядке <оператор, операнд, операнд>.
 		if pkg.IsNumber(r) {
 			operandInInt, err := strconv.ParseInt(r, 10, 64)
