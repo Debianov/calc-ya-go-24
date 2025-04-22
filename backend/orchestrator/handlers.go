@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-var exprsList = backend.ExpressionListEmptyFabric()
+var exprsList = backend.CallExpressionListEmptyFabric()
 
 func calcHandler(w http.ResponseWriter, r *http.Request) {
 	var (
@@ -44,7 +44,7 @@ func calcHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(422)
 		return
 	}
-	expr, _ := exprsList.ExprFabricAdd(postfix)
+	expr, _ := exprsList.AddExprFabric(postfix)
 	marshaledExpr, err := expr.MarshalID()
 	if err != nil {
 		log.Panic(err)

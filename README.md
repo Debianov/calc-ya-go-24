@@ -16,16 +16,16 @@
 версии 1.24.**
 
 # Переменные среды
-Необходимые переменные среды для работы оркестратора:
+Для изменения стандартных настроек оркестратора можно использовать следующие переменные среды:
 ```
-TIME_ADDITION_MS
-TIME_SUBTRACTION_MS
-TIME_MULTIPLICATIONS_MS
-TIME_DIVISIONS_MS
+TIME_ADDITION
+TIME_SUBTRACTION
+TIME_MULTIPLICATIONS
+TIME_DIVISIONS
 ```
 Формат значений переменных: `<число><ns/us/ms/s/m>`
 
-Необходимые переменные среды для работы агента:
+Переменные среды для агента:
 ```
 COMPUTING_POWER
 ```
@@ -36,10 +36,10 @@ COMPUTING_POWER
 ```shell
 # filename: calc.env
 #!/bin/sh
-export TIME_ADDITION_MS=2s
-export TIME_SUBTRACTION_MS=2s
-export TIME_MULTIPLICATIONS_MS=2s
-export TIME_DIVISIONS_MS=2s
+export TIME_ADDITION=2s
+export TIME_SUBTRACTION=2s
+export TIME_MULTIPLICATIONS=2s
+export TIME_DIVISIONS=2s
 export COMPUTING_POWER=10
 ```
 

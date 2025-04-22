@@ -6,7 +6,6 @@ import (
 	"github.com/Debianov/calc-ya-go-24/pkg"
 	"go/types"
 	"log"
-	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -74,13 +73,6 @@ const (
 	Cancelled               = "Отменено"
 )
 
-const (
-	TIME_ADDITION_MS        string = "TIME_ADDITION_MS"
-	TIME_SUBTRACTION_MS            = "TIME_SUBTRACTION_MS"
-	TIME_MULTIPLICATIONS_MS        = "TIME_MULTIPLICATIONS_MS"
-	TIME_DIVISIONS_MS              = "TIME_DIVISIONS_MS"
-)
-
 type TaskToSend struct {
 	Task              *Task `json:"task"`
 	timeAtSendingTask time.Time
@@ -141,17 +133,16 @@ func (e *Expression) generateId(operatorCount int) int {
 
 func (e *Expression) getOperationTime(currentOperator string) (result time.Duration) {
 	var (
-		operatorAndEnvNamePairs = map[string]string{"+": TIME_ADDITION_MS, "-": TIME_SUBTRACTION_MS,
-			"*": TIME_MULTIPLICATIONS_MS, "/": TIME_DIVISIONS_MS}
+		operatorAndEnvNamePairs = map[string]EnvVar{"+": *CallEnvVarFabric("TIME_ADDITION", "2s"),
+			"-": *CallEnvVarFabric("TIME_SUBTRACTION", "2s"),
+			"*": *CallEnvVarFabric("TIME_MULTIPLICATIONS", "2s"),
+			"/": *CallEnvVarFabric("TIME_DIVISIONS", "2s")}
 		maybeDuration string
 		err           error
 	)
-	for operator, envName := range operatorAndEnvNamePairs {
+	for operator, envVar := range operatorAndEnvNamePairs {
 		if currentOperator == operator {
-			maybeDuration = os.Getenv(envName)
-			if maybeDuration == "" {
-				log.Printf("WARNING: переменная %s не обнаружена", envName)
-			}
+			maybeDuration, _ = envVar.Get()
 			result, err = time.ParseDuration(maybeDuration)
 			if err != nil {
 				log.Panic(err)
@@ -169,7 +160,7 @@ func (e *Expression) FabricReadyExprSendTask() TaskToSend {
 		} else {
 			e.changeStatus(Ready)
 		}
-		taskToSend := e.tasksHandler.TaskToSendFabricAdd(maybeReadyTask, time.Now())
+		taskToSend := e.tasksHandler.AddTaskToSendFabric(maybeReadyTask, time.Now())
 		return taskToSend
 	} else {
 		e.changeStatus(NoReadyTasks)

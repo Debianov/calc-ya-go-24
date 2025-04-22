@@ -94,7 +94,7 @@ func (e ExpressionStub) Marshal() (result []byte, err error) {
 
 func testCalcHandler201(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
+		exprsList = backend.CallExpressionListEmptyFabric()
 	})
 	var (
 		requestsToTest    = []backend.RequestJson{{"2+2*4"}, {"4*2+3*5"}}
@@ -167,14 +167,14 @@ func TestCalcHandler(t *testing.T) {
 
 func testExpressionsHandler200(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
+		exprsList = backend.CallExpressionListEmptyFabric()
 	})
 	var (
 		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0},
 			{ID: 1, Status: backend.Completed, Result: 432}, {ID: 2, Status: backend.Cancelled, Result: 0},
 			{ID: 3, Status: backend.NoReadyTasks, Result: 0}, {ID: 4, Status: backend.Completed, Result: -2345}}
 	)
-	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
+	exprsList = backend.CallExpressionListFabricWithElements(expectedExpressions)
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.ExpressionsJsonTitle{{expectedExpressions}}
@@ -186,12 +186,12 @@ func testExpressionsHandler200(t *testing.T) {
 
 func testExpressionsHandlerPost(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
+		exprsList = backend.CallExpressionListEmptyFabric()
 	})
 	var (
 		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0}}
 	)
-	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
+	exprsList = backend.CallExpressionListFabricWithElements(expectedExpressions)
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.EmptyJson{{}}
@@ -203,7 +203,7 @@ func testExpressionsHandlerPost(t *testing.T) {
 }
 
 func testExpressionsHandlerEmpty(t *testing.T) {
-	exprsList = backend.ExpressionListEmptyFabric()
+	exprsList = backend.CallExpressionListEmptyFabric()
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.ExpressionsJsonTitle{{Expressions: make([]*backend.Expression, 0)}}
@@ -223,13 +223,13 @@ func TestExpressionHandler(t *testing.T) {
 
 func testExpressionIdHandler200(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
+		exprsList = backend.CallExpressionListEmptyFabric()
 	})
 	var (
 		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0},
 			{ID: 1, Status: backend.Completed, Result: 431}}
 	)
-	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
+	exprsList = backend.CallExpressionListFabricWithElements(expectedExpressions)
 	for ind, expExpr := range expectedExpressions {
 		t.Run(fmt.Sprintf("ExpressionId%d", ind), func(t *testing.T) {
 			var (
@@ -247,12 +247,12 @@ func testExpressionIdHandler200(t *testing.T) {
 
 func testExpressionIdHandler404(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
+		exprsList = backend.CallExpressionListEmptyFabric()
 	})
 	var (
 		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0}}
 	)
-	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
+	exprsList = backend.CallExpressionListFabricWithElements(expectedExpressions)
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.EmptyJson{{}}
@@ -266,12 +266,12 @@ func testExpressionIdHandler404(t *testing.T) {
 
 func testExpressionIdHandlerPost(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
+		exprsList = backend.CallExpressionListEmptyFabric()
 	})
 	var (
 		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0}}
 	)
-	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
+	exprsList = backend.CallExpressionListFabricWithElements(expectedExpressions)
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.EmptyJson{{}}
@@ -284,7 +284,7 @@ func testExpressionIdHandlerPost(t *testing.T) {
 }
 
 func testExpressionIdHandlerEmpty(t *testing.T) {
-	exprsList = backend.ExpressionListEmptyFabric()
+	exprsList = backend.CallExpressionListEmptyFabric()
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.EmptyJson{{}}
@@ -305,9 +305,9 @@ func TestExpressionIdHandler(t *testing.T) {
 
 func testTaskGetHandler200(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
+		exprsList = backend.CallExpressionListEmptyFabric()
 	})
-	exprsList.ExprFabricAdd([]string{"2", "3", "*"})
+	exprsList.AddExprFabric([]string{"2", "3", "*"})
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.TaskToSend{{Task: &backend.Task{
@@ -325,7 +325,7 @@ func testTaskGetHandler200(t *testing.T) {
 }
 
 func testTaskGetHandlerEmpty404(t *testing.T) {
-	exprsList = backend.ExpressionListEmptyFabric()
+	exprsList = backend.CallExpressionListEmptyFabric()
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.EmptyJson{{}}
@@ -338,9 +338,9 @@ func testTaskGetHandlerEmpty404(t *testing.T) {
 
 func testTaskGetHandler404(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
+		exprsList = backend.CallExpressionListEmptyFabric()
 	})
-	exprsList.ExprFabricAdd([]string{"2", "3", "*"})
+	exprsList.AddExprFabric([]string{"2", "3", "*"})
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.TaskToSend{{Task: &backend.Task{
@@ -365,9 +365,9 @@ func testTaskGetHandler404(t *testing.T) {
 
 func testTaskPostHandler200(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
+		exprsList = backend.CallExpressionListEmptyFabric()
 	})
-	exprsList.ExprFabricAdd([]string{"2", "3", "*"})
+	exprsList.AddExprFabric([]string{"2", "3", "*"})
 	var (
 		requestsToTest    = []*backend.AgentResult{{ID: 0, Result: 6}}
 		expectedResponses = []backend.EmptyJson{{}}
@@ -388,7 +388,7 @@ func testTaskPostHandler200(t *testing.T) {
 }
 
 func testTaskPostHandler404(t *testing.T) {
-	exprsList = backend.ExpressionListEmptyFabric()
+	exprsList = backend.CallExpressionListEmptyFabric()
 	var (
 		requestsToTest    = []*backend.AgentResult{{ID: 0, Result: 6}}
 		expectedResponses = []backend.EmptyJson{{}}
@@ -410,7 +410,7 @@ func (r *RandomJson) Marshal() (result []byte, err error) {
 }
 
 func testTaskPostHandler422(t *testing.T) {
-	exprsList = backend.ExpressionListEmptyFabric()
+	exprsList = backend.CallExpressionListEmptyFabric()
 	var (
 		requestsToTest    = []*RandomJson{{Hey: 0, Issue: 6}}
 		expectedResponses = []backend.EmptyJson{{}}

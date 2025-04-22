@@ -3,15 +3,16 @@ package backend
 import (
 	"iter"
 	"maps"
+	"os"
 	"sync"
 	"time"
 )
 
 // Tasks - обёртка над pkg.Stack с дополнительными методами. Нужен для обработки случаев, когда несколько Task-ов готовы
 // и нужно продолжить работу других Task-ов, зависящие от первых.
-// В случае, когда все необходимые Task-и обновлены, их результаты записываются в нужный Task, и дальше он отправляется
+// В случае, когда все необходимые Task-и обновлены, их результаты записываются в зависимый Task, и дальше он отправляется
 // для дальнейшей обработки.
-// Для работы с TaskToSend встроена структура.
+// Для работы с TaskToSend встроена отдельная структура.
 type Tasks struct {
 	*sentTasks
 	buf                                []*Task
@@ -44,8 +45,8 @@ func (t *Tasks) Len() int {
 	return len(t.buf)
 }
 
-// registerFirst возвращает первую задачу, не удаляет её, но регистрирует и не выдаёт ту же задачу в дальнейшем.
-// Удаляет в том случае, если задача не используется для вычисления других задач.
+// registerFirst возвращает первую задачу, не удаляет её, но запоминает и не выдаёт повторно в дальнейшем.
+// Удаляет в том случае, если задача не будет использоваться для вычисления других задач.
 // Для простого получения задачи используйте Get.
 func (t *Tasks) registerFirst() (task *Task) {
 	task = t.Get(t.tasksCountBeforeWaitingTask)
@@ -116,7 +117,7 @@ type sentTasks struct {
 	mut sync.Mutex
 }
 
-func (t *sentTasks) TaskToSendFabricAdd(readyTask *Task, timeAtSendingTask time.Time) (result TaskToSend) {
+func (t *sentTasks) AddTaskToSendFabric(readyTask *Task, timeAtSendingTask time.Time) (result TaskToSend) {
 	result = TaskToSend{
 		Task:              readyTask,
 		timeAtSendingTask: timeAtSendingTask,
@@ -137,14 +138,14 @@ func (t *sentTasks) popSentTask(taskId int) (*Task, time.Time, bool) {
 	return taskWithTimer.Task, taskWithTimer.timeAtSendingTask, ok
 }
 
-func sentTasksFabric() *sentTasks {
+func callSentTasksFabric() *sentTasks {
 	return &sentTasks{
 		buf: make(map[int]TaskToSend),
 	}
 }
 
 func TasksFabric() *Tasks {
-	newSentTasks := sentTasksFabric()
+	newSentTasks := callSentTasksFabric()
 	return &Tasks{sentTasks: newSentTasks}
 }
 
@@ -153,7 +154,7 @@ type ExpressionsList struct {
 	exprs map[int]*Expression
 }
 
-func (e *ExpressionsList) ExprFabricAdd(postfix []string) (newExpr *Expression, newId int) {
+func (e *ExpressionsList) AddExprFabric(postfix []string) (newExpr *Expression, newId int) {
 	newId = e.generateId()
 	newTaskSpace := TasksFabric()
 	newExpr = &Expression{postfix: postfix, ID: newId, Status: Ready, tasksHandler: newTaskSpace}
@@ -214,14 +215,14 @@ func (e *ExpressionsList) GetReadyExpr() (expr *Expression) {
 	return nil
 }
 
-func ExpressionListEmptyFabric() *ExpressionsList {
+func CallExpressionListEmptyFabric() *ExpressionsList {
 	return &ExpressionsList{
 		mut:   sync.Mutex{},
 		exprs: make(map[int]*Expression),
 	}
 }
 
-func ExpressionListFabricWithElements(exprs []*Expression) *ExpressionsList {
+func CallExpressionListFabricWithElements(exprs []*Expression) *ExpressionsList {
 	var result = make(map[int]*Expression)
 	for _, expr := range exprs {
 		result[expr.ID] = expr
@@ -229,5 +230,33 @@ func ExpressionListFabricWithElements(exprs []*Expression) *ExpressionsList {
 	return &ExpressionsList{
 		mut:   sync.Mutex{},
 		exprs: result,
+	}
+}
+
+type EnvVar struct {
+	key                  string
+	defaultValue         string
+	extractedValue       string
+	attemptToExtractFlag bool
+}
+
+func (e *EnvVar) Get() (result string, ok bool) {
+	if e.extractedValue == "" && !e.attemptToExtractFlag {
+		e.extractedValue = os.Getenv(e.key)
+		e.attemptToExtractFlag = true
+	}
+	if e.extractedValue != "" {
+		return e.extractedValue, true
+	} else if e.defaultValue != "" {
+		return e.defaultValue, true
+	} else {
+		return "", false
+	}
+}
+
+func CallEnvVarFabric(key string, defaultValue string) *EnvVar {
+	return &EnvVar{
+		key:          key,
+		defaultValue: defaultValue,
 	}
 }
