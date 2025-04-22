@@ -3,7 +3,6 @@ package main
 import (
 	"github.com/Debianov/calc-ya-go-24/backend"
 	"log"
-	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -11,12 +10,14 @@ import (
 
 func main() {
 	var (
-		err   error
-		agent = getDefaultAgent()
-		wg    sync.WaitGroup
+		err          error
+		agent        = getDefaultAgent()
+		compPowerVar = *backend.CallEnvVarFabric("COMPUTING_POWER", "10")
+		wg           sync.WaitGroup
 	)
 
-	var numberCalcGoroutinesInString = os.Getenv("COMPUTING_POWER")
+	var numberCalcGoroutinesInString string
+	numberCalcGoroutinesInString, _ = compPowerVar.Get()
 	numberCalcGoroutines, err := strconv.ParseInt(numberCalcGoroutinesInString, 10, 32)
 
 	var (
