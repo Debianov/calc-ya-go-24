@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"github.com/Debianov/calc-ya-go-24/backend"
+	pb "github.com/Debianov/calc-ya-go-24/backend/proto"
+	"google.golang.org/grpc"
 	"log"
 	"strconv"
 	"sync"
@@ -11,18 +14,24 @@ import (
 func main() {
 	var (
 		err          error
-		agent        = getDefaultAgent()
+		grpcClient   *grpc.ClientConn
 		compPowerVar = *backend.CallEnvVarFabric("COMPUTING_POWER", "10")
 		wg           sync.WaitGroup
 	)
+
+	grpcClient, err = getDefaultGrpcClient()
+	if err != nil {
+		panic(err)
+	}
+	var agent = getDefaultAgent(grpcClient)
 
 	var numberCalcGoroutinesInString string
 	numberCalcGoroutinesInString, _ = compPowerVar.Get()
 	numberCalcGoroutines, err := strconv.ParseInt(numberCalcGoroutinesInString, 10, 32)
 
 	var (
-		results          = make(chan backend.AgentResult, numberCalcGoroutines)
-		tasksReadyToCalc = make(chan backend.Task, numberCalcGoroutines)
+		results          = make(chan *pb.TaskResult, numberCalcGoroutines)
+		tasksReadyToCalc = make(chan *pb.TaskToSend, numberCalcGoroutines)
 	)
 
 	for range numberCalcGoroutines {
@@ -32,11 +41,11 @@ func main() {
 			for {
 				select {
 				case task := <-tasksReadyToCalc:
-					agentResult, err := agent.calc(task)
+					calcResult, err := Calc(task)
 					if err != nil {
-						log.Println(err, task.PairID)
+						log.Println(err, task.PairId)
 					}
-					results <- agentResult
+					results <- calcResult
 				}
 			}
 		}()
@@ -47,9 +56,11 @@ func main() {
 		for {
 			select {
 			case <-time.After(30 * time.Millisecond):
-				task, ok := agent.get()
-				if ok {
-					tasksReadyToCalc <- *task
+				task, err := agent.GetTask(context.TODO(), &pb.Empty{})
+				if err != nil && task != nil {
+					tasksReadyToCalc <- task
+				} else if err != nil {
+					log.Println(err, task.PairId)
 				}
 			}
 		}
@@ -60,9 +71,9 @@ func main() {
 		for {
 			select {
 			case result := <-results:
-				err = agent.send(result)
+				_, err = agent.SendTask(context.TODO(), result)
 				if err != nil {
-					log.Println(err, result.ID)
+					log.Println(err, result.PairId)
 				}
 			}
 		}

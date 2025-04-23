@@ -1,7 +1,7 @@
 package main
 
 import (
-	pb "github.com/Debianov/calc-ya-go-24/backend/orchestrator/proto"
+	pb "github.com/Debianov/calc-ya-go-24/backend/proto"
 	"google.golang.org/grpc"
 	"net"
 )

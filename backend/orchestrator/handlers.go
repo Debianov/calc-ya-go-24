@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/Debianov/calc-ya-go-24/backend"
-	pb "github.com/Debianov/calc-ya-go-24/backend/orchestrator/proto"
+	pb "github.com/Debianov/calc-ya-go-24/backend/proto"
 	"github.com/Debianov/calc-ya-go-24/pkg"
 	"io"
 	"log"
@@ -155,7 +155,7 @@ func (g *GrpcTaskServer) GetTask(_ context.Context, _ *pb.Empty) (result *pb.Tas
 	return
 }
 
-func (g *GrpcTaskServer) SendTask(ctx context.Context, req *pb.TaskResult) (_ *pb.Empty, err error) {
+func (g *GrpcTaskServer) SendTask(_ context.Context, req *pb.TaskResult) (_ *pb.Empty, err error) {
 	var reqInJson = backend.AgentResult{
 		ID:     int(req.PairId),
 		Result: req.Result,
