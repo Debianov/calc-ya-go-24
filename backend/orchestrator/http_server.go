@@ -1,7 +1,7 @@
 package main
 
 func StartHttpServer() (err error) {
-	s := GetDefaultServer(getHandler())
+	s := GetDefaultHttpServer(getHandler())
 	err = s.ListenAndServe()
 	return
 }
