@@ -3,10 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"github.com/Debianov/calc-ya-go-24/backend"
 	pb "github.com/Debianov/calc-ya-go-24/backend/proto"
 	"github.com/Debianov/calc-ya-go-24/pkg"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"io"
 	"log"
 	"net/http"
@@ -137,12 +138,12 @@ func getHandler() (handler http.Handler) {
 func (g *GrpcTaskServer) GetTask(_ context.Context, _ *pb.Empty) (result *pb.TaskToSend, err error) {
 	expr := exprsList.GetReadyExpr()
 	if expr == nil {
-		return nil, errors.New("there is no ready task")
+		return nil, status.Error(codes.NotFound, "нет готовых задач")
 	}
 	taskToSend := expr.CallTaskToSendFabric()
 	if taskToSend.Task == nil {
-		return nil, errors.New("BUG: разработчиком ожидается, что выданный expr будеть иметь хотя бы 1" +
-			"готовый к отправке task")
+		return nil, status.Errorf(codes.Internal, "(bug) разработчиком ожидается, что выданный expr (id %d) "+
+			"будет иметь хотя бы 1 готовый к отправке task.", expr.ID)
 	}
 	result = &pb.TaskToSend{
 		PairId:        int32(taskToSend.Task.PairID),
@@ -152,7 +153,7 @@ func (g *GrpcTaskServer) GetTask(_ context.Context, _ *pb.Empty) (result *pb.Tas
 		OperationTime: taskToSend.Task.OperationTime.String(),
 	}
 	taskToSend.Task.ChangeStatus(backend.Sent)
-	return
+	return result, status.Error(codes.OK, "")
 }
 
 func (g *GrpcTaskServer) SendTask(_ context.Context, req *pb.TaskResult) (_ *pb.Empty, err error) {
@@ -163,11 +164,11 @@ func (g *GrpcTaskServer) SendTask(_ context.Context, req *pb.TaskResult) (_ *pb.
 	exprId, _ := pkg.Unpair(reqInJson.ID)
 	expr, ok := exprsList.Get(exprId)
 	if !ok {
-		return nil, errors.New("ID выражения, соответствующей этой задаче, не найдено")
+		return nil, status.Error(codes.NotFound, "ID выражения, соответствующей этой задаче, не найдено")
 	}
 	err = expr.WriteResultIntoTask(reqInJson.ID, reqInJson.Result, time.Now())
 	if err != nil {
 		return nil, err
 	}
-	return &pb.Empty{}, nil
+	return &pb.Empty{}, status.Error(codes.OK, "")
 }

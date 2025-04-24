@@ -196,11 +196,11 @@ func (e *Expression) MarshalID() (result []byte, err error) {
 func (e *Expression) WriteResultIntoTask(taskID int, result int64, timeAtReceiveTask time.Time) (err error) {
 	task, timeAtSendingTask, ok := e.tasksHandler.popSentTask(taskID)
 	if !ok {
-		return TaskIDNotExist{taskID}
+		return &TaskIDNotExist{taskID}
 	}
 	if factTime := timeAtReceiveTask.Sub(timeAtSendingTask); factTime > task.OperationTime {
 		e.changeStatus(Cancelled)
-		return TimeoutExecution{task.OperationTime, factTime, task.Operation,
+		return &TimeoutExecution{task.OperationTime, factTime, task.Operation,
 			task.PairID}
 	}
 	err = task.WriteResult(result)

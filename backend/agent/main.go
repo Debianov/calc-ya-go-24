@@ -5,6 +5,8 @@ import (
 	"github.com/Debianov/calc-ya-go-24/backend"
 	pb "github.com/Debianov/calc-ya-go-24/backend/proto"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"log"
 	"strconv"
 	"sync"
@@ -57,10 +59,15 @@ func main() {
 			select {
 			case <-time.After(30 * time.Millisecond):
 				task, err := agent.GetTask(context.TODO(), &pb.Empty{})
-				if err != nil && task != nil {
+				code := status.Code(err)
+				if code != codes.NotFound && code != codes.OK {
+					if task != nil {
+						log.Printf("%v at pairId task: %d\n", err, task.PairId)
+					} else {
+						log.Println(err)
+					}
+				} else if code == codes.OK {
 					tasksReadyToCalc <- task
-				} else if err != nil {
-					log.Println(err, task.PairId)
 				}
 			}
 		}

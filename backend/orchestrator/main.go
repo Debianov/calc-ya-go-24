@@ -1,13 +1,27 @@
 package main
 
+import "sync"
+
 func main() {
-	var err error
-	err = StartGrpcServer()
-	if err != nil {
-		panic(err)
-	}
-	err = StartHttpServer()
-	if err != nil {
-		panic(err)
-	}
+	var (
+		wg  sync.WaitGroup
+		err error
+	)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err = UpGrpcServer()
+		if err != nil {
+			panic(err)
+		}
+	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err = UpHttpServer()
+		if err != nil {
+			panic(err)
+		}
+	}()
+	wg.Wait()
 }

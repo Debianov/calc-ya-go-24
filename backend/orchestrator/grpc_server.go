@@ -8,7 +8,8 @@ import (
 
 type GrpcTaskServer struct {
 	pb.TaskServiceServer
-	Addr string
+	Addr             string
+	serviceRegistrar *grpc.Server
 }
 
 func (g *GrpcTaskServer) ListenAndServe() (err error) {
@@ -17,17 +18,22 @@ func (g *GrpcTaskServer) ListenAndServe() (err error) {
 	if err != nil {
 		return
 	}
-	serviceRegistrar := grpc.NewServer()
-	pb.RegisterTaskServiceServer(serviceRegistrar, g)
-	err = serviceRegistrar.Serve(listener)
+	g.serviceRegistrar = grpc.NewServer()
+	pb.RegisterTaskServiceServer(g.serviceRegistrar, g)
+	err = g.serviceRegistrar.Serve(listener)
 	if err != nil {
 		return
 	}
 	return
 }
 
-func StartGrpcServer() (err error) {
+func (g *GrpcTaskServer) Close() {
+	g.serviceRegistrar.Stop()
+}
+
+func UpGrpcServer() (err error) {
 	s := GetDefaultGrpcServer()
 	err = s.ListenAndServe()
+	defer s.Close()
 	return
 }
