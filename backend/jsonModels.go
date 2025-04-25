@@ -26,7 +26,7 @@ func (r RequestJson) Marshal() (result []byte, err error) {
 
 /*
 RequestNilJson изначально нужен для передачи nil и вызова Internal Server Error. Мы передаём nil, затем
-он извлекается через DefaultExpression для создания Reader, а этот Reader запихивается в http.Request и передаётся
+он извлекается через Expression для создания Reader, а этот Reader запихивается в http.Request и передаётся
 дальше в функцию. Далее, функция вызовет панику, паника перехватится PanicMiddleware, и далее по списку.
 
 Используется в тесте TestBadGetHandler.
@@ -73,35 +73,86 @@ const (
 	Cancelled               = "Отменено"
 )
 
-type TaskToSend struct {
-	Task              *Task `json:"task"`
-	timeAtSendingTask time.Time
-}
-
-func (t *TaskToSend) Marshal() (result []byte, err error) {
-	result, err = json.Marshal(&t)
-	return
-}
-
-type Expression interface {
+type CommonExpression interface {
 	JsonPayload
-	DivideIntoTasks()
-	GetReadyTask() TaskToSend
-	MarshalID() (result []byte, err error)
+	MarshalId() (result []byte, err error)
+	GetId() int
+	GetReadyGrpcTask() (GrpcTask, error)
+	GetTasksHandler() CommonTasksHandler
 	UpdateTask(taskID int, result int64, timeAtReceiveTask time.Time) (err error)
-	GetTasksHandler() *Tasks
+	DivideIntoTasks()
 }
 
-type DefaultExpression struct {
+type Expression struct {
 	postfix      []string
 	ID           int        `json:"id"`
 	Status       ExprStatus `json:"status"`
 	Result       int64      `json:"result"`
-	tasksHandler *Tasks
+	tasksHandler *TasksHandler
 	mut          sync.Mutex
 }
 
-func (e *DefaultExpression) DivideIntoTasks() {
+func (e *Expression) Marshal() (result []byte, err error) {
+	result, err = json.Marshal(&e)
+	return
+}
+
+func (e *Expression) MarshalId() (result []byte, err error) {
+	result, err = json.Marshal(&struct {
+		ID int `json:"id"`
+	}{e.ID})
+	return
+}
+
+func (e *Expression) GetId() int {
+	return e.ID
+}
+
+func (e *Expression) GetReadyGrpcTask() (result GrpcTask, err error) {
+	maybeReadyTask := e.tasksHandler.RegisterFirst()
+	if maybeReadyTask.IsReadyToCalc() {
+		if e.tasksHandler.Len() == 1 {
+			e.changeStatus(NoReadyTasks)
+		} else {
+			e.changeStatus(Ready)
+		}
+		taskWithTime := e.tasksHandler.sentTasks.WrapWithTime(maybeReadyTask, time.Now())
+		taskWithTime.SetStatus(Sent)
+		return &taskWithTime, nil
+	} else {
+		return nil, errors.New("(bug) разработчиком ожидается, что выданный expr (id %d) " +
+			"будет иметь хотя бы 1 готовый к отправке task")
+	}
+}
+
+func (e *Expression) GetTasksHandler() CommonTasksHandler {
+	return e.tasksHandler
+}
+
+func (e *Expression) UpdateTask(taskID int, result int64, timeAtReceiveTask time.Time) (err error) {
+	task, timeAtSendingTask, ok := e.tasksHandler.PopSentTask(taskID)
+	if !ok {
+		return &TaskIDNotExist{taskID}
+	}
+	if factTime := timeAtReceiveTask.Sub(timeAtSendingTask); factTime > task.GetOperationTime() {
+		e.changeStatus(Cancelled)
+		return &TimeoutExecution{task.GetOperationTime(), factTime, task.GetOperation(),
+			task.GetPairId()}
+	}
+	err = task.WriteResult(result)
+	if err != nil {
+		log.Panic(err)
+	}
+	// UpdateExpression
+	e.tasksHandler.CountUpdatedTask()
+	if e.tasksHandler.Len() == 1 {
+		e.changeStatus(Completed)
+		e.writeResult(task.GetResult())
+	}
+	return
+}
+
+func (e *Expression) DivideIntoTasks() {
 	var (
 		operatorCount int
 		stack         = pkg.StackFabric[int64]()
@@ -117,7 +168,7 @@ func (e *DefaultExpression) DivideIntoTasks() {
 		} else if pkg.IsOperator(r) {
 			var (
 				newId   = e.generateId(operatorCount)
-				newTask *Task
+				newTask InternalTask
 			)
 			if stack.Len() >= 2 {
 				newTask = &Task{PairID: newId, Arg2: stack.Pop(), Arg1: stack.Pop(),
@@ -129,18 +180,18 @@ func (e *DefaultExpression) DivideIntoTasks() {
 				newTask = &Task{PairID: newId, Operation: r, OperationTime: e.getOperationTime(r),
 					Status: WaitingOtherTasks}
 			}
-			e.tasksHandler.add(newTask)
+			e.tasksHandler.Add(newTask)
 			operatorCount++
 		}
 	}
 	return
 }
 
-func (e *DefaultExpression) generateId(operatorCount int) int {
-	return pkg.Pair(e.ID, operatorCount)
+func (e *Expression) generateId(operatorCount int) int32 {
+	return int32(pkg.Pair(e.ID, operatorCount))
 }
 
-func (e *DefaultExpression) getOperationTime(currentOperator string) (result time.Duration) {
+func (e *Expression) getOperationTime(currentOperator string) (result time.Duration) {
 	var (
 		operatorAndEnvNamePairs = map[string]EnvVar{"+": *CallEnvVarFabric("TIME_ADDITION", "2s"),
 			"-": *CallEnvVarFabric("TIME_SUBTRACTION", "2s"),
@@ -161,23 +212,7 @@ func (e *DefaultExpression) getOperationTime(currentOperator string) (result tim
 	return
 }
 
-func (e *DefaultExpression) GetReadyTask() TaskToSend {
-	maybeReadyTask := e.tasksHandler.registerFirst()
-	if maybeReadyTask.IsReadyToCalc() {
-		if e.tasksHandler.Len() == 1 {
-			e.changeStatus(NoReadyTasks)
-		} else {
-			e.changeStatus(Ready)
-		}
-		taskToSend := e.tasksHandler.AddTaskToSendFabric(maybeReadyTask, time.Now())
-		return taskToSend
-	} else {
-		e.changeStatus(NoReadyTasks)
-		return TaskToSend{}
-	}
-}
-
-func (e *DefaultExpression) changeStatus(status ExprStatus) {
+func (e *Expression) changeStatus(status ExprStatus) {
 	e.mut.Lock()
 	defer e.mut.Unlock()
 	if e.Status == status {
@@ -190,53 +225,14 @@ func (e *DefaultExpression) changeStatus(status ExprStatus) {
 	}
 }
 
-func (e *DefaultExpression) Marshal() (result []byte, err error) {
-	result, err = json.Marshal(&e)
-	return
-}
-
-func (e *DefaultExpression) MarshalID() (result []byte, err error) {
-	result, err = json.Marshal(&struct {
-		ID int `json:"id"`
-	}{ID: e.ID})
-	return
-}
-
-func (e *DefaultExpression) UpdateTask(taskID int, result int64, timeAtReceiveTask time.Time) (err error) {
-	task, timeAtSendingTask, ok := e.tasksHandler.popSentTask(taskID)
-	if !ok {
-		return &TaskIDNotExist{taskID}
-	}
-	if factTime := timeAtReceiveTask.Sub(timeAtSendingTask); factTime > task.OperationTime {
-		e.changeStatus(Cancelled)
-		return &TimeoutExecution{task.OperationTime, factTime, task.Operation,
-			task.PairID}
-	}
-	err = task.WriteResult(result)
-	if err != nil {
-		log.Panic(err)
-	}
-	// UpdateExpression
-	e.tasksHandler.CountUpdatedTask()
-	if e.tasksHandler.Len() == 1 {
-		e.changeStatus(Completed)
-		e.writeResult(task.result)
-	}
-	return
-}
-
-func (e *DefaultExpression) writeResult(result int64) {
+func (e *Expression) writeResult(result int64) {
 	e.mut.Lock()
 	defer e.mut.Unlock()
 	e.Result = result
 }
 
-func (e *DefaultExpression) GetTasksHandler() *Tasks {
-	return e.tasksHandler
-}
-
 type ExpressionsJsonTitle struct {
-	Expressions []*DefaultExpression `json:"expressions"`
+	Expressions []CommonExpression `json:"expressions"`
 }
 
 func (e *ExpressionsJsonTitle) Marshal() (result []byte, err error) {
@@ -245,7 +241,7 @@ func (e *ExpressionsJsonTitle) Marshal() (result []byte, err error) {
 }
 
 type ExpressionJsonTitle struct {
-	Expression *DefaultExpression `json:"expression"`
+	Expression CommonExpression `json:"expression"`
 }
 
 func (e *ExpressionJsonTitle) Marshal() (result []byte, err error) {
@@ -262,8 +258,18 @@ const (
 	Calculated
 )
 
+type AgentResult struct {
+	ID     int   `json:"ID"`
+	Result int64 `json:"result"`
+}
+
+func (a *AgentResult) Marshal() (result []byte, err error) {
+	result, err = json.Marshal(&a)
+	return
+}
+
 type Task struct {
-	PairID        int           `json:"id"`
+	PairID        int32         `json:"id"`
 	Arg1          interface{}   `json:"arg1"`
 	Arg2          interface{}   `json:"arg2"`
 	Operation     string        `json:"operation"`
@@ -273,19 +279,38 @@ type Task struct {
 	mut           sync.Mutex
 }
 
-func (t *Task) Marshal() (result []byte, err error) {
-	result, err = json.Marshal(&struct { // нужно отфильтровать публичные атрибуты (t.Status), поскольку
-		// Marshal их распарсит, даже несмотря на отсутствие дополнительного поля формата `json:""`.
-		PairID        int           `json:"id"`
-		Arg1          interface{}   `json:"arg1"`
-		Arg2          interface{}   `json:"arg2"`
-		Operation     string        `json:"operation"`
-		OperationTime time.Duration `json:"operationTime"`
-	}{t.PairID, t.Arg1, t.Arg2, t.Operation, t.OperationTime})
-	if err != nil {
-		log.Panic(err)
-	}
-	return
+func (t *Task) GetPairId() int32 {
+	return t.PairID
+}
+
+func (t *Task) GetArg1() (int64, bool) {
+	v, ok := t.Arg1.(int64)
+	return v, ok
+}
+
+func (t *Task) GetArg2() (int64, bool) {
+	v, ok := t.Arg2.(int64)
+	return v, ok
+}
+
+func (t *Task) SetArg1(result int64) {
+	t.Arg1 = result
+}
+
+func (t *Task) SetArg2(result int64) {
+	t.Arg2 = result
+}
+
+func (t *Task) GetOperation() string {
+	return t.Operation
+}
+
+func (t *Task) GetOperationTime() time.Duration {
+	return t.OperationTime
+}
+
+func (t *Task) GetResult() int64 {
+	return t.result
 }
 
 func (t *Task) WriteResult(result int64) error {
@@ -301,7 +326,7 @@ func (t *Task) WriteResult(result int64) error {
 	return nil
 }
 
-func (t *Task) ChangeStatus(newStatus TaskStatus) {
+func (t *Task) SetStatus(newStatus TaskStatus) {
 	t.mut.Lock()
 	defer t.mut.Unlock()
 	if t.Status == newStatus {
@@ -314,14 +339,4 @@ func (t *Task) ChangeStatus(newStatus TaskStatus) {
 
 func (t *Task) IsReadyToCalc() bool {
 	return t.Status == ReadyToCalc
-}
-
-type AgentResult struct {
-	ID     int   `json:"ID"`
-	Result int64 `json:"result"`
-}
-
-func (a *AgentResult) Marshal() (result []byte, err error) {
-	result, err = json.Marshal(&a)
-	return
 }

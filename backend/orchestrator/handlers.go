@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-var exprsList backend.ExpressionsList = backend.CallEmptyExpressionListFabric()
+var exprsList backend.CommonExpressionsList = backend.CallEmptyExpressionListFabric()
 
 func calcHandler(w http.ResponseWriter, r *http.Request) {
 	var (
@@ -48,7 +48,7 @@ func calcHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	expr, _ := exprsList.AddExprFabric(postfix)
-	marshaledExpr, err := expr.MarshalID()
+	marshaledExpr, err := expr.MarshalId()
 	if err != nil {
 		log.Panic(err)
 	}
@@ -65,8 +65,8 @@ func expressionsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	var err error
 	exprs := exprsList.GetAllExprs()
-	slices.SortFunc(exprs, func(expression *backend.DefaultExpression, expression2 *backend.DefaultExpression) int {
-		if expression.ID >= expression2.ID {
+	slices.SortFunc(exprs, func(expression backend.CommonExpression, expression2 backend.CommonExpression) int {
+		if expression.GetId() >= expression2.GetId() {
 			return 0
 		} else {
 			return -1
@@ -98,7 +98,7 @@ func expressionIdHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)
 		return
 	}
-	var exprJsonHandler = backend.ExpressionJsonTitle{expr}
+	var exprJsonHandler = backend.ExpressionJsonTitle{Expression: expr}
 	exprHandlerInBytes, err := json.Marshal(&exprJsonHandler)
 	if err != nil {
 		log.Panic(err)
@@ -140,20 +140,20 @@ func (g *GrpcTaskServer) GetTask(_ context.Context, _ *pb.Empty) (result *pb.Tas
 	if expr == nil {
 		return nil, status.Error(codes.NotFound, "нет готовых задач")
 	}
-	taskToSend := expr.GetReadyTask()
-	if taskToSend.Task == nil {
-		return nil, status.Errorf(codes.Internal, "(bug) разработчиком ожидается, что выданный expr (id %d) "+
-			"будет иметь хотя бы 1 готовый к отправке task.", expr.ID)
+	var taskWithTime backend.GrpcTask
+	taskWithTime, err = expr.GetReadyGrpcTask()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "%s", err)
+	} else {
+		result = &pb.TaskToSend{
+			PairId:            taskWithTime.GetPairId(),
+			Arg1:              taskWithTime.GetArg1(),
+			Arg2:              taskWithTime.GetArg2(),
+			Operation:         taskWithTime.GetOperation(),
+			OperationDuration: taskWithTime.GetOperationDuration(),
+		}
+		return result, status.Error(codes.OK, "")
 	}
-	result = &pb.TaskToSend{
-		PairId:        int32(taskToSend.Task.PairID),
-		Arg1:          taskToSend.Task.Arg1.(int64),
-		Arg2:          taskToSend.Task.Arg2.(int64),
-		Operation:     taskToSend.Task.Operation,
-		OperationTime: taskToSend.Task.OperationTime.String(),
-	}
-	taskToSend.Task.ChangeStatus(backend.Sent)
-	return result, status.Error(codes.OK, "")
 }
 
 func (g *GrpcTaskServer) SendTask(_ context.Context, req *pb.TaskResult) (_ *pb.Empty, err error) {

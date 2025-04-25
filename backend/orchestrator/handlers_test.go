@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Debianov/calc-ya-go-24/backend"
-	pb "github.com/Debianov/calc-ya-go-24/backend/proto"
 	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
@@ -116,8 +115,8 @@ func testCalcHandler201(t *testing.T) {
 	)
 
 	exprs := exprsList.GetAllExprs()
-	slices.SortFunc(exprs, func(expression *backend.DefaultExpression, expression2 *backend.DefaultExpression) int {
-		if expression.ID >= expression2.ID {
+	slices.SortFunc(exprs, func(expression backend.CommonExpression, expression2 backend.CommonExpression) int {
+		if expression.GetId() >= expression2.GetId() {
 			return 0
 		} else {
 			return -1
@@ -128,10 +127,10 @@ func testCalcHandler201(t *testing.T) {
 		var tasksListLen = expr.GetTasksHandler().Len()
 		for taskInd := 0; taskInd < tasksListLen; taskInd++ {
 			task := expr.GetTasksHandler().Get(taskInd)
-			assert.Equal(t, task.PairID, expectedTasks[exprInd][taskInd].PairID)
-			assert.Equal(t, task.Arg1, expectedTasks[exprInd][taskInd].Arg1)
-			assert.Equal(t, task.Arg2, expectedTasks[exprInd][taskInd].Arg2)
-			assert.Equal(t, task.Operation, expectedTasks[exprInd][taskInd].Operation)
+			assert.Equal(t, task.GetPairId(), expectedTasks[exprInd][taskInd].PairID)
+			assert.Equal(t, interface{}(task.GetArg1()), expectedTasks[exprInd][taskInd].Arg1)
+			assert.Equal(t, interface{}(task.GetArg2()), expectedTasks[exprInd][taskInd].Arg2)
+			assert.Equal(t, task.GetOperation(), expectedTasks[exprInd][taskInd].Operation)
 		}
 	}
 }
@@ -170,9 +169,11 @@ func testExpressionsHandler200(t *testing.T) {
 		exprsList = backend.CallEmptyExpressionListFabric()
 	})
 	var (
-		expectedExpressions = []*backend.DefaultExpression{{ID: 0, Status: backend.Ready, Result: 0},
-			{ID: 1, Status: backend.Completed, Result: 432}, {ID: 2, Status: backend.Cancelled, Result: 0},
-			{ID: 3, Status: backend.NoReadyTasks, Result: 0}, {ID: 4, Status: backend.Completed, Result: -2345}}
+		expectedExpressions = []backend.CommonExpression{&backend.Expression{ID: 0, Status: backend.Ready, Result: 0},
+			&backend.Expression{ID: 1, Status: backend.Completed, Result: 432},
+			&backend.Expression{ID: 2, Status: backend.Cancelled, Result: 0},
+			&backend.Expression{ID: 3, Status: backend.NoReadyTasks, Result: 0},
+			&backend.Expression{ID: 4, Status: backend.Completed, Result: -2345}}
 	)
 	exprsList = backend.CallExpressionListWithElementsFabric(expectedExpressions)
 	var (
@@ -189,7 +190,7 @@ func testExpressionsHandlerPost(t *testing.T) {
 		exprsList = backend.CallEmptyExpressionListFabric()
 	})
 	var (
-		expectedExpressions = []*backend.DefaultExpression{{ID: 0, Status: backend.Ready, Result: 0}}
+		expectedExpressions = []backend.CommonExpression{&backend.Expression{ID: 0, Status: backend.Ready, Result: 0}}
 	)
 	exprsList = backend.CallExpressionListWithElementsFabric(expectedExpressions)
 	var (
@@ -206,7 +207,7 @@ func testExpressionsHandlerEmpty(t *testing.T) {
 	exprsList = backend.CallEmptyExpressionListFabric()
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*backend.ExpressionsJsonTitle{{Expressions: make([]*backend.DefaultExpression, 0)}}
+		expectedResponses = []*backend.ExpressionsJsonTitle{{Expressions: make([]backend.CommonExpression, 0)}}
 		commonHttpCase    = backend.HttpCases[backend.EmptyJson, *backend.ExpressionsJsonTitle]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/expressions",
 			ExpectedHttpCode: http.StatusOK}
@@ -226,8 +227,8 @@ func testExpressionIdHandler200(t *testing.T) {
 		exprsList = backend.CallEmptyExpressionListFabric()
 	})
 	var (
-		expectedExpressions = []*backend.DefaultExpression{{ID: 0, Status: backend.Ready, Result: 0},
-			{ID: 1, Status: backend.Completed, Result: 431}}
+		expectedExpressions = []backend.CommonExpression{&backend.Expression{ID: 0, Status: backend.Ready, Result: 0},
+			&backend.Expression{ID: 1, Status: backend.Completed, Result: 431}}
 	)
 	exprsList = backend.CallExpressionListWithElementsFabric(expectedExpressions)
 	for ind, expExpr := range expectedExpressions {
@@ -250,7 +251,7 @@ func testExpressionIdHandler404(t *testing.T) {
 		exprsList = backend.CallEmptyExpressionListFabric()
 	})
 	var (
-		expectedExpressions = []*backend.DefaultExpression{{ID: 0, Status: backend.Ready, Result: 0}}
+		expectedExpressions = []backend.CommonExpression{&backend.Expression{ID: 0, Status: backend.Ready, Result: 0}}
 	)
 	exprsList = backend.CallExpressionListWithElementsFabric(expectedExpressions)
 	var (
@@ -269,7 +270,7 @@ func testExpressionIdHandlerPost(t *testing.T) {
 		exprsList = backend.CallEmptyExpressionListFabric()
 	})
 	var (
-		expectedExpressions = []*backend.DefaultExpression{{ID: 0, Status: backend.Ready, Result: 0}}
+		expectedExpressions = []backend.CommonExpression{&backend.Expression{ID: 0, Status: backend.Ready, Result: 0}}
 	)
 	exprsList = backend.CallExpressionListWithElementsFabric(expectedExpressions)
 	var (
@@ -352,47 +353,90 @@ func TestInternalServerErrorHandler(t *testing.T) {
 	}
 }
 
-type StubExpressionsList struct {
-	buf []*backend.Expression
-}
-
-func (s StubExpressionsList) AddExprFabric(postfix []string) (newExpr *backend.DefaultExpression, newId int) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s StubExpressionsList) GetAllExprs() []*backend.DefaultExpression {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s StubExpressionsList) Get(id int) (*backend.DefaultExpression, bool) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s StubExpressionsList) GetReadyExpr() (expr *backend.DefaultExpression) {
-	panic("implement me")
-}
-
-func prepareExprsList(expressions []*backend.Expression) {
-	if len(expressions) != 0 {
-		exprsList = StubExpressionsList{}
-	} else {
-		exprsList = StubExpressionsList{expressions}
-	}
-
-}
-
-type StubExpression struct {
-	ID           int
-	Status       backend.ExprStatus
-	TasksHandler *StubTasks
-}
-
-type StubTasks struct {
-	Buf []*pb.TaskToSend
-}
+//type StubExpressionsList struct {
+//	buf []backend.CommonExpression
+//}
+//
+//func (s *StubExpressionsList) AddExprFabric(postfix []string) (newExpr *backend.CommonExpression, newId int) {
+//	//TODO implement me
+//	panic("implement me")
+//}
+//
+//func (s *StubExpressionsList) GetAllExprs() []*backend.CommonExpression {
+//	//TODO implement me
+//	panic("implement me")
+//}
+//
+//func (s *StubExpressionsList) Get(id int) (*backend.CommonExpression, bool) {
+//	//TODO implement me
+//	panic("implement me")
+//}
+//
+//func (s *StubExpressionsList) GetReadyExpr() (expr *backend.CommonExpression) {
+//	panic("implement me")
+//}
+//
+//func prepareExprsList(expressions ...backend.CommonExpression) {
+//	if len(expressions) != 0 {
+//		exprsList = &StubExpressionsList{}
+//	} else {
+//		exprsList = &StubExpressionsList{expressions}
+//	}
+//}
+//
+//type StubExpression struct {
+//	ID           int
+//	Status       backend.ExprStatus
+//	TasksHandler backend.CommonTasksHandler
+//}
+//
+//func (s *StubExpression) Marshal() (result []byte, err error) {
+//	//TODO implement me
+//	panic("implement me")
+//}
+//
+//func (s *StubExpression) DivideIntoTasks() {
+//	//TODO implement me
+//	panic("implement me")
+//}
+//
+//func (s *StubExpression) GetReadyTask() backend.TaskWithTime {
+//	//TODO implement me
+//	panic("implement me")
+//}
+//
+//func (s *StubExpression) MarshalID() (result []byte, err error) {
+//	//TODO implement me
+//	panic("implement me")
+//}
+//
+//func (s *StubExpression) UpdateTask(taskID int, result int64, timeAtReceiveTask time.Time) (err error) {
+//	//TODO implement me
+//	panic("implement me")
+//}
+//
+//func (s *StubExpression) GetTasksHandler() *backend.TasksHandler {
+//	//TODO implement me
+//	panic("implement me")
+//}
+//
+//type StubTasksHandler struct {
+//	Buf map[int]*backend.CommonTask
+//}
+//
+//func (s *StubTasksHandler) Get(ind int) *backend.CommonTask {
+//	return s.Buf[ind]
+//}
+//
+//func (s *StubTasksHandler) Len() int {
+//	//TODO implement me
+//	panic("implement me")
+//}
+//
+//func (s *StubTasksHandler) CountUpdatedTask() {
+//	//TODO implement me
+//	panic("implement me")
+//}
 
 //func testGetTaskNotFound(t *testing.T) {
 //	var (
@@ -404,35 +448,33 @@ type StubTasks struct {
 //		t.Cleanup(func() {
 //			exprsList = backend.CallEmptyExpressionListFabric()
 //		})
-//		prepareExprsList()
+//		prepareExprsList[*StubExpression]()
 //		result, err = g.GetTask(context.TODO(), &pb.Empty{})
 //		assert.Equal(t, codes.NotFound, status.Code(err))
 //		assert.Equal(t, nil, result)
 //	})
 //	t.Run("OnlyNoReadyExprsInList", func(t *testing.T) {
-//		var (
-//			exprsInList = []*StubExpression{{ID: 0, Status: backend.NoReadyTasks}, {ID: 1,
-//				Status: backend.Cancelled}, {ID: 0, Status: backend.Completed}}
-//		)
+//		var exprsInList = []*StubExpression{{ID: 0, Status: backend.NoReadyTasks}, {ID: 1, Status: backend.Cancelled}}
 //		t.Cleanup(func() {
 //			exprsList = backend.CallEmptyExpressionListFabric()
 //		})
-//		prepareExprsList(exprsInList)
+//		prepareExprsList(exprsInList...)
 //		result, err = g.GetTask(context.TODO(), &pb.Empty{})
 //		assert.Equal(t, codes.NotFound, status.Code(err))
 //		assert.Equal(t, nil, result)
 //	})
 //	t.Run("ReadyAndNotReadyExprsInList", func(t *testing.T) {
 //		var (
-//			expectedResult = &pb.TaskToSend{
-//				PairId:        0,
-//				Arg1:          2,
-//				Arg2:          5,
-//				Operation:     "+",
-//				OperationTime: "3s", // default value from config.go
-//			}
+//			expectedResult = backend.CommonTask(&pb.TaskToSend{
+//				PairId:            0,
+//				Arg1:              2,
+//				Arg2:              5,
+//				Operation:         "+",
+//				OperationDuration: "3s", // default value from config.go
+//			},
+//			)
 //			exprsInList = []*StubExpression{{ID: 0, Status: backend.NoReadyTasks}, {ID: 1, Status: backend.Cancelled},
-//				{ID: 2, Status: backend.Ready, TasksHandler: &StubTasks{[]*pb.TaskToSend{expectedResult}}}}
+//				{ID: 2, Status: backend.Ready, TasksHandler: &StubTasksHandler{map[int]*backend.CommonTask{0: &expectedResult}}}}
 //		)
 //		t.Cleanup(func() {
 //			exprsList = backend.CallEmptyExpressionListFabric()
@@ -440,8 +482,8 @@ type StubTasks struct {
 //		prepareExprsList(exprsInList...)
 //	})
 //}
-//
+
 //func TestGetTask(t *testing.T) {
 //	t.Run("TestGetTaskNotFound", testGetTaskNotFound)
-//	t.Run("TestGetTaskOk", testGetTaskOk)
+//	//t.Run("TestGetTaskOk", testGetTaskOk)
 //}

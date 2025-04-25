@@ -62,9 +62,9 @@ type TaskToSend struct {
 	PairId        int32                  `protobuf:"varint,1,opt,name=PairId,proto3" json:"PairId,omitempty"`
 	Arg1          int64                  `protobuf:"varint,2,opt,name=Arg1,proto3" json:"Arg1,omitempty"`
 	Arg2          int64                  `protobuf:"varint,3,opt,name=Arg2,proto3" json:"Arg2,omitempty"`
-	Operation     string                 `protobuf:"bytes,4,opt,name=Operation,proto3" json:"Operation,omitempty"`
-	OperationTime string                 `protobuf:"bytes,5,opt,name=OperationTime,proto3" json:"OperationTime,omitempty"`
-	unknownFields protoimpl.UnknownFields
+	Operation         string `protobuf:"bytes,4,opt,name=Operation,proto3" json:"Operation,omitempty"`
+	OperationDuration string `protobuf:"bytes,5,opt,name=OperationDuration,proto3" json:"OperationDuration,omitempty"`
+	unknownFields     protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
@@ -126,9 +126,9 @@ func (x *TaskToSend) GetOperation() string {
 	return ""
 }
 
-func (x *TaskToSend) GetOperationTime() string {
+func (x *TaskToSend) GetOperationDuration() string {
 	if x != nil {
-		return x.OperationTime
+		return x.OperationDuration
 	}
 	return ""
 }
@@ -197,7 +197,7 @@ const file_proto_internal_proto_rawDesc = "" +
 	"\x04Arg1\x18\x02 \x01(\x03R\x04Arg1\x12\x12\n" +
 	"\x04Arg2\x18\x03 \x01(\x03R\x04Arg2\x12\x1c\n" +
 	"\tOperation\x18\x04 \x01(\tR\tOperation\x12$\n" +
-	"\rOperationTime\x18\x05 \x01(\tR\rOperationTime\"<\n" +
+	"\rOperationDuration\x18\x05 \x01(\tR\rOperationDuration\"<\n" +
 	"\n" +
 	"TaskResult\x12\x16\n" +
 	"\x06PairId\x18\x01 \x01(\x05R\x06PairId\x12\x16\n" +

@@ -10,11 +10,11 @@ type TimeoutExecution struct {
 	operationTime time.Duration
 	factTime      time.Duration
 	operation     string
-	pairId        int
+	pairId        int32
 }
 
 func (t TimeoutExecution) Error() string {
-	exprId, taskId := pkg.Unpair(t.pairId)
+	exprId, taskId := pkg.Unpair(int(t.pairId))
 	return fmt.Sprintf("возник timeout при обработке task: %d из expression %d, оператор: %s; время на "+
 		"выполнение: %s,фактически: %s", taskId, exprId, t.operation, t.operationTime, t.factTime)
 }

@@ -8,75 +8,84 @@ import (
 	"time"
 )
 
-// Tasks - обёртка над pkg.Stack с дополнительными методами. Нужен для обработки случаев, когда несколько Task-ов готовы
+type CommonTasksHandler interface {
+	Add(task InternalTask)
+	Get(ind int) InternalTask
+	Len() int
+	RegisterFirst() (task InternalTask)
+	CountUpdatedTask()
+	PopSentTask(taskId int) (InternalTask, time.Time, bool)
+}
+
+// TasksHandler - обёртка над pkg.Stack с дополнительными методами. Нужен для обработки случаев, когда несколько Task-ов готовы
 // и нужно продолжить работу других Task-ов, зависящие от первых.
 // В случае, когда все необходимые Task-и обновлены, их результаты записываются в зависимый Task, и дальше он отправляется
 // для дальнейшей обработки.
-// Для работы с TaskToSend встроена отдельная структура.
-type Tasks struct {
-	*sentTasks
+// Для работы с TaskWithTime встроена отдельная структура.
+type TasksHandler struct {
+	sentTasks                          *sentTasks
 	buf                                []*Task
 	tasksCountBeforeWaitingTask        int
 	updatedTasksCountBeforeWaitingTask int
 	mut                                sync.Mutex
 }
 
-func (t *Tasks) add(task *Task) {
+func (t *TasksHandler) Add(task InternalTask) {
 	t.mut.Lock()
-	t.buf = append(t.buf, task)
+	t.buf = append(t.buf, task.(*Task))
 	t.mut.Unlock()
 }
 
-func (t *Tasks) Get(ind int) *Task {
+func (t *TasksHandler) Get(ind int) InternalTask {
 	t.mut.Lock()
 	defer t.mut.Unlock()
 	return t.buf[ind]
 }
 
-func (t *Tasks) delete(ind int) {
+func (t *TasksHandler) delete(ind int) {
 	t.mut.Lock()
 	defer t.mut.Unlock()
 	t.buf = append(t.buf[:ind], t.buf[ind+1:]...)
 }
 
-func (t *Tasks) Len() int {
+func (t *TasksHandler) Len() int {
 	t.mut.Lock()
 	defer t.mut.Unlock()
 	return len(t.buf)
 }
 
-// registerFirst возвращает первую задачу, не удаляет её, но запоминает и не выдаёт повторно в дальнейшем.
+// RegisterFirst возвращает первую задачу, не удаляет её, но запоминает и не выдаёт повторно в дальнейшем.
 // Удаляет в том случае, если задача не будет использоваться для вычисления других задач.
 // Для простого получения задачи используйте Get.
-func (t *Tasks) registerFirst() (task *Task) {
+func (t *TasksHandler) RegisterFirst() (task InternalTask) {
 	task = t.Get(t.tasksCountBeforeWaitingTask)
 	if task.IsReadyToCalc() {
 		t.tasksCountBeforeWaitingTask++
 		return
 	} else {
-		var expectedTask Task
+		var expectedTask InternalTask
 		if t.updatedTasksCountBeforeWaitingTask == t.tasksCountBeforeWaitingTask { // цикл в
 			// горутине не требуется, поскольку агент будут самостоятельно тыкать в сервер, чтоб тот проверил на
 			// наличие свободных таск
 			switch t.tasksCountBeforeWaitingTask {
 			case 1:
-				if _, ok := task.Arg1.(string); ok != true {
-					expectedTask = *t.Get(0)
+				if _, ok := task.GetArg1(); ok != true {
+					expectedTask = t.Get(0)
 					t.delete(0)
-					task.Arg1 = expectedTask.result
+					task.SetArg1(expectedTask.GetResult())
 				}
 				t.updatedTasksCountBeforeWaitingTask = 0
 				t.tasksCountBeforeWaitingTask = 0
 			case 2:
-				if _, ok := task.Arg1.(string); ok != true {
-					expectedTask = *t.Get(0)
+				if _, ok := task.GetArg1(); ok != true {
+					expectedTask = t.Get(0)
 					t.delete(0)
-					task.Arg1 = expectedTask.result
+					task.SetArg1(expectedTask.GetResult())
 				}
-				if _, ok := task.Arg2.(string); ok != true {
-					expectedTask = *t.Get(0)
+				if _, ok := task.GetArg2(); ok != true {
+					expectedTask = t.Get(0)
 					t.delete(0)
-					task.Arg2 = expectedTask.result
+					task.SetArg2(expectedTask.GetResult())
 				}
 				t.updatedTasksCountBeforeWaitingTask = 0
 				t.tasksCountBeforeWaitingTask = 0
@@ -85,21 +94,21 @@ func (t *Tasks) registerFirst() (task *Task) {
 					break
 				}
 				calculatedTaskOffset := t.tasksCountBeforeWaitingTask
-				if _, ok := task.Arg2.(string); ok != true {
-					expectedTask = *t.Get(calculatedTaskOffset - 1)
+				if _, ok := task.GetArg2(); ok != true {
+					expectedTask = t.Get(calculatedTaskOffset - 1)
 					t.delete(calculatedTaskOffset - 1)
-					task.Arg2 = expectedTask.result
+					task.SetArg2(expectedTask.GetResult())
 				}
-				if _, ok := task.Arg1.(string); ok != true {
-					expectedTask = *t.Get(calculatedTaskOffset - 2)
+				if _, ok := task.GetArg1(); ok != true {
+					expectedTask = t.Get(calculatedTaskOffset - 2)
 					t.delete(calculatedTaskOffset - 2)
-					task.Arg1 = expectedTask.result
+					task.SetArg1(expectedTask.GetResult())
 				}
 				t.updatedTasksCountBeforeWaitingTask = t.updatedTasksCountBeforeWaitingTask - 2
 				t.tasksCountBeforeWaitingTask = t.tasksCountBeforeWaitingTask - 2 + 1 // -2 удалённых и +1 текущий, который
 				// теперь ReadyToCalc.
 			}
-			task.ChangeStatus(ReadyToCalc)
+			task.SetStatus(ReadyToCalc)
 		}
 		return
 	}
@@ -107,91 +116,95 @@ func (t *Tasks) registerFirst() (task *Task) {
 
 // CountUpdatedTask обновляет число отправленных тасок. Обязателен к вызову, если любой Task, указатель которого
 // хранится в экземпляре этой структуры, был обновлён.
-func (t *Tasks) CountUpdatedTask() {
+func (t *TasksHandler) CountUpdatedTask() {
 	t.updatedTasksCountBeforeWaitingTask++
 }
 
-// sentTasks — map для работы с TaskToSend структурой.
+func (t *TasksHandler) PopSentTask(taskId int) (InternalTask, time.Time, bool) {
+	return t.sentTasks.PopSentTask(taskId)
+}
+
+// sentTasks — map для работы с TaskWithTime структурой.
 type sentTasks struct {
-	buf map[int]TaskToSend
+	buf map[int]TaskWithTime
 	mut sync.Mutex
 }
 
-func (t *sentTasks) AddTaskToSendFabric(readyTask *Task, timeAtSendingTask time.Time) (result TaskToSend) {
-	result = TaskToSend{
-		Task:              readyTask,
+func (t *sentTasks) WrapWithTime(readyTask InternalTask, timeAtSendingTask time.Time) (result TaskWithTime) {
+	result = TaskWithTime{
+		task:              readyTask.(*Task),
 		timeAtSendingTask: timeAtSendingTask,
 	}
 	t.mut.Lock()
-	t.buf[readyTask.PairID] = result
+	t.buf[int(readyTask.GetPairId())] = result
 	t.mut.Unlock()
 	return
 }
 
-func (t *sentTasks) popSentTask(taskId int) (*Task, time.Time, bool) {
+func (t *sentTasks) PopSentTask(taskId int) (*Task, time.Time, bool) {
 	t.mut.Lock()
 	taskWithTimer, ok := t.buf[taskId]
 	if ok {
 		delete(t.buf, taskId)
 	}
 	t.mut.Unlock()
-	return taskWithTimer.Task, taskWithTimer.timeAtSendingTask, ok
+	return taskWithTimer.task, taskWithTimer.timeAtSendingTask, ok
 }
 
 func callSentTasksFabric() *sentTasks {
 	return &sentTasks{
-		buf: make(map[int]TaskToSend),
+		buf: make(map[int]TaskWithTime),
 	}
 }
 
-func CallTasksFabric() *Tasks {
+func CallTasksFabric() *TasksHandler {
 	newSentTasks := callSentTasksFabric()
-	return &Tasks{sentTasks: newSentTasks}
+	return &TasksHandler{sentTasks: newSentTasks}
 }
 
-type ExpressionsList interface {
-	AddExprFabric(postfix []string) (newExpr *DefaultExpression, newId int)
-	GetAllExprs() []*DefaultExpression
-	Get(id int) (*DefaultExpression, bool)
-	GetReadyExpr() (expr *DefaultExpression)
+type CommonExpressionsList interface {
+	AddExprFabric(postfix []string) (newExpr CommonExpression, newId int)
+	GetAllExprs() []CommonExpression
+	Get(id int) (CommonExpression, bool)
+	GetReadyExpr() (expr CommonExpression)
 }
 
-type DefaultExpressionsList struct {
+type ExpressionsList struct {
 	mut   sync.Mutex
-	exprs map[int]*DefaultExpression
+	exprs map[int]*Expression
 }
 
-func (e *DefaultExpressionsList) AddExprFabric(postfix []string) (newExpr *DefaultExpression, newId int) {
+func (e *ExpressionsList) AddExprFabric(postfix []string) (newExpr CommonExpression, newId int) {
 	newId = e.generateId()
 	newTaskSpace := CallTasksFabric()
-	newExpr = &DefaultExpression{postfix: postfix, ID: newId, Status: Ready, tasksHandler: newTaskSpace}
+	newExpr = &Expression{postfix: postfix, ID: newId, Status: Ready, tasksHandler: newTaskSpace}
 	newExpr.DivideIntoTasks()
 	e.mut.Lock()
-	e.exprs[newId] = newExpr
+	e.exprs[newId] = newExpr.(*Expression)
 	e.mut.Unlock()
 	return
 }
 
-func (e *DefaultExpressionsList) generateId() (id int) {
+func (e *ExpressionsList) generateId() (id int) {
 	e.mut.Lock()
 	defer e.mut.Unlock()
 	return len(e.exprs)
 }
 
 // GetAllExprs выдаёт значения в рандомном порядке.
-func (e *DefaultExpressionsList) GetAllExprs() []*DefaultExpression {
+func (e *ExpressionsList) GetAllExprs() []CommonExpression {
 	e.mut.Lock()
 	defer e.mut.Unlock()
 	var (
 		stop          func()
-		v             *DefaultExpression
-		next          func() (*DefaultExpression, bool)
+		v             *Expression
+		next          func() (*Expression, bool)
 		thereAreElems = true
-		seq           iter.Seq[*DefaultExpression]
-		result        = make([]*DefaultExpression, 0)
+		seq           iter.Seq[*Expression]
+		result        = make([]CommonExpression, 0)
 	)
 	seq = maps.Values(e.exprs)
-	next, stop = iter.Pull[*DefaultExpression](seq)
+	next, stop = iter.Pull[*Expression](seq)
 	defer stop()
 	for {
 		v, thereAreElems = next()
@@ -204,14 +217,14 @@ func (e *DefaultExpressionsList) GetAllExprs() []*DefaultExpression {
 	return result
 }
 
-func (e *DefaultExpressionsList) Get(id int) (*DefaultExpression, bool) {
+func (e *ExpressionsList) Get(id int) (CommonExpression, bool) {
 	e.mut.Lock()
 	var result, ok = e.exprs[id]
 	e.mut.Unlock()
 	return result, ok
 }
 
-func (e *DefaultExpressionsList) GetReadyExpr() (expr *DefaultExpression) {
+func (e *ExpressionsList) GetReadyExpr() (expr CommonExpression) {
 	e.mut.Lock()
 	defer e.mut.Unlock()
 	for _, v := range e.exprs {
@@ -222,19 +235,19 @@ func (e *DefaultExpressionsList) GetReadyExpr() (expr *DefaultExpression) {
 	return nil
 }
 
-func CallEmptyExpressionListFabric() *DefaultExpressionsList {
-	return &DefaultExpressionsList{
+func CallEmptyExpressionListFabric() *ExpressionsList {
+	return &ExpressionsList{
 		mut:   sync.Mutex{},
-		exprs: make(map[int]*DefaultExpression),
+		exprs: make(map[int]*Expression),
 	}
 }
 
-func CallExpressionListWithElementsFabric(exprs []*DefaultExpression) *DefaultExpressionsList {
-	var result = make(map[int]*DefaultExpression)
+func CallExpressionListWithElementsFabric(exprs []CommonExpression) *ExpressionsList {
+	var result = make(map[int]*Expression)
 	for _, expr := range exprs {
-		result[expr.ID] = expr
+		result[expr.GetId()] = expr.(*Expression)
 	}
-	return &DefaultExpressionsList{
+	return &ExpressionsList{
 		mut:   sync.Mutex{},
 		exprs: result,
 	}
