@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-var exprsList = backend.CallExpressionListEmptyFabric()
+var exprsList backend.ExpressionsList = backend.CallEmptyExpressionListFabric()
 
 func calcHandler(w http.ResponseWriter, r *http.Request) {
 	var (
@@ -65,7 +65,7 @@ func expressionsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	var err error
 	exprs := exprsList.GetAllExprs()
-	slices.SortFunc(exprs, func(expression *backend.Expression, expression2 *backend.Expression) int {
+	slices.SortFunc(exprs, func(expression *backend.DefaultExpression, expression2 *backend.DefaultExpression) int {
 		if expression.ID >= expression2.ID {
 			return 0
 		} else {
@@ -140,7 +140,7 @@ func (g *GrpcTaskServer) GetTask(_ context.Context, _ *pb.Empty) (result *pb.Tas
 	if expr == nil {
 		return nil, status.Error(codes.NotFound, "нет готовых задач")
 	}
-	taskToSend := expr.CallTaskToSendFabric()
+	taskToSend := expr.GetReadyTask()
 	if taskToSend.Task == nil {
 		return nil, status.Errorf(codes.Internal, "(bug) разработчиком ожидается, что выданный expr (id %d) "+
 			"будет иметь хотя бы 1 готовый к отправке task.", expr.ID)
@@ -166,9 +166,9 @@ func (g *GrpcTaskServer) SendTask(_ context.Context, req *pb.TaskResult) (_ *pb.
 	if !ok {
 		return nil, status.Error(codes.NotFound, "ID выражения, соответствующей этой задаче, не найдено")
 	}
-	err = expr.WriteResultIntoTask(reqInJson.ID, reqInJson.Result, time.Now())
+	err = expr.UpdateTask(reqInJson.ID, reqInJson.Result, time.Now())
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.Aborted, "%s", err)
 	}
 	return &pb.Empty{}, status.Error(codes.OK, "")
 }

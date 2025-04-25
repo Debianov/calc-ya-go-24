@@ -26,7 +26,7 @@ func (r RequestJson) Marshal() (result []byte, err error) {
 
 /*
 RequestNilJson изначально нужен для передачи nil и вызова Internal Server Error. Мы передаём nil, затем
-он извлекается через Expression для создания Reader, а этот Reader запихивается в http.Request и передаётся
+он извлекается через DefaultExpression для создания Reader, а этот Reader запихивается в http.Request и передаётся
 дальше в функцию. Далее, функция вызовет панику, паника перехватится PanicMiddleware, и далее по списку.
 
 Используется в тесте TestBadGetHandler.
@@ -83,7 +83,16 @@ func (t *TaskToSend) Marshal() (result []byte, err error) {
 	return
 }
 
-type Expression struct {
+type Expression interface {
+	JsonPayload
+	DivideIntoTasks()
+	GetReadyTask() TaskToSend
+	MarshalID() (result []byte, err error)
+	UpdateTask(taskID int, result int64, timeAtReceiveTask time.Time) (err error)
+	GetTasksHandler() *Tasks
+}
+
+type DefaultExpression struct {
 	postfix      []string
 	ID           int        `json:"id"`
 	Status       ExprStatus `json:"status"`
@@ -92,7 +101,7 @@ type Expression struct {
 	mut          sync.Mutex
 }
 
-func (e *Expression) DivideIntoTasks() {
+func (e *DefaultExpression) DivideIntoTasks() {
 	var (
 		operatorCount int
 		stack         = pkg.StackFabric[int64]()
@@ -127,11 +136,11 @@ func (e *Expression) DivideIntoTasks() {
 	return
 }
 
-func (e *Expression) generateId(operatorCount int) int {
+func (e *DefaultExpression) generateId(operatorCount int) int {
 	return pkg.Pair(e.ID, operatorCount)
 }
 
-func (e *Expression) getOperationTime(currentOperator string) (result time.Duration) {
+func (e *DefaultExpression) getOperationTime(currentOperator string) (result time.Duration) {
 	var (
 		operatorAndEnvNamePairs = map[string]EnvVar{"+": *CallEnvVarFabric("TIME_ADDITION", "2s"),
 			"-": *CallEnvVarFabric("TIME_SUBTRACTION", "2s"),
@@ -152,7 +161,7 @@ func (e *Expression) getOperationTime(currentOperator string) (result time.Durat
 	return
 }
 
-func (e *Expression) CallTaskToSendFabric() TaskToSend {
+func (e *DefaultExpression) GetReadyTask() TaskToSend {
 	maybeReadyTask := e.tasksHandler.registerFirst()
 	if maybeReadyTask.IsReadyToCalc() {
 		if e.tasksHandler.Len() == 1 {
@@ -168,7 +177,7 @@ func (e *Expression) CallTaskToSendFabric() TaskToSend {
 	}
 }
 
-func (e *Expression) changeStatus(status ExprStatus) {
+func (e *DefaultExpression) changeStatus(status ExprStatus) {
 	e.mut.Lock()
 	defer e.mut.Unlock()
 	if e.Status == status {
@@ -181,19 +190,19 @@ func (e *Expression) changeStatus(status ExprStatus) {
 	}
 }
 
-func (e *Expression) Marshal() (result []byte, err error) {
+func (e *DefaultExpression) Marshal() (result []byte, err error) {
 	result, err = json.Marshal(&e)
 	return
 }
 
-func (e *Expression) MarshalID() (result []byte, err error) {
+func (e *DefaultExpression) MarshalID() (result []byte, err error) {
 	result, err = json.Marshal(&struct {
 		ID int `json:"id"`
 	}{ID: e.ID})
 	return
 }
 
-func (e *Expression) WriteResultIntoTask(taskID int, result int64, timeAtReceiveTask time.Time) (err error) {
+func (e *DefaultExpression) UpdateTask(taskID int, result int64, timeAtReceiveTask time.Time) (err error) {
 	task, timeAtSendingTask, ok := e.tasksHandler.popSentTask(taskID)
 	if !ok {
 		return &TaskIDNotExist{taskID}
@@ -207,8 +216,8 @@ func (e *Expression) WriteResultIntoTask(taskID int, result int64, timeAtReceive
 	if err != nil {
 		log.Panic(err)
 	}
+	// UpdateExpression
 	e.tasksHandler.CountUpdatedTask()
-	//if tasksHandler.UpdatedAll
 	if e.tasksHandler.Len() == 1 {
 		e.changeStatus(Completed)
 		e.writeResult(task.result)
@@ -216,18 +225,18 @@ func (e *Expression) WriteResultIntoTask(taskID int, result int64, timeAtReceive
 	return
 }
 
-func (e *Expression) writeResult(result int64) {
+func (e *DefaultExpression) writeResult(result int64) {
 	e.mut.Lock()
 	defer e.mut.Unlock()
 	e.Result = result
 }
 
-func (e *Expression) GetTasksHandler() *Tasks {
+func (e *DefaultExpression) GetTasksHandler() *Tasks {
 	return e.tasksHandler
 }
 
 type ExpressionsJsonTitle struct {
-	Expressions []*Expression `json:"expressions"`
+	Expressions []*DefaultExpression `json:"expressions"`
 }
 
 func (e *ExpressionsJsonTitle) Marshal() (result []byte, err error) {
@@ -236,7 +245,7 @@ func (e *ExpressionsJsonTitle) Marshal() (result []byte, err error) {
 }
 
 type ExpressionJsonTitle struct {
-	Expression *Expression `json:"expression"`
+	Expression *DefaultExpression `json:"expression"`
 }
 
 func (e *ExpressionJsonTitle) Marshal() (result []byte, err error) {

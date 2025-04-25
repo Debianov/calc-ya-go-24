@@ -27,8 +27,6 @@ func (t TaskIDNotExist) Error() string {
 	return fmt.Sprintf("задачи с ID %d не найдена", t.taskId)
 }
 
-var NoReadyTaskError = &NoReadyTask{}
-
 type NoReadyTask struct {
 }
 

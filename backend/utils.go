@@ -144,20 +144,27 @@ func callSentTasksFabric() *sentTasks {
 	}
 }
 
-func TasksFabric() *Tasks {
+func CallTasksFabric() *Tasks {
 	newSentTasks := callSentTasksFabric()
 	return &Tasks{sentTasks: newSentTasks}
 }
 
-type ExpressionsList struct {
-	mut   sync.Mutex
-	exprs map[int]*Expression
+type ExpressionsList interface {
+	AddExprFabric(postfix []string) (newExpr *DefaultExpression, newId int)
+	GetAllExprs() []*DefaultExpression
+	Get(id int) (*DefaultExpression, bool)
+	GetReadyExpr() (expr *DefaultExpression)
 }
 
-func (e *ExpressionsList) AddExprFabric(postfix []string) (newExpr *Expression, newId int) {
+type DefaultExpressionsList struct {
+	mut   sync.Mutex
+	exprs map[int]*DefaultExpression
+}
+
+func (e *DefaultExpressionsList) AddExprFabric(postfix []string) (newExpr *DefaultExpression, newId int) {
 	newId = e.generateId()
-	newTaskSpace := TasksFabric()
-	newExpr = &Expression{postfix: postfix, ID: newId, Status: Ready, tasksHandler: newTaskSpace}
+	newTaskSpace := CallTasksFabric()
+	newExpr = &DefaultExpression{postfix: postfix, ID: newId, Status: Ready, tasksHandler: newTaskSpace}
 	newExpr.DivideIntoTasks()
 	e.mut.Lock()
 	e.exprs[newId] = newExpr
@@ -165,26 +172,26 @@ func (e *ExpressionsList) AddExprFabric(postfix []string) (newExpr *Expression, 
 	return
 }
 
-func (e *ExpressionsList) generateId() (id int) {
+func (e *DefaultExpressionsList) generateId() (id int) {
 	e.mut.Lock()
 	defer e.mut.Unlock()
 	return len(e.exprs)
 }
 
 // GetAllExprs выдаёт значения в рандомном порядке.
-func (e *ExpressionsList) GetAllExprs() []*Expression {
+func (e *DefaultExpressionsList) GetAllExprs() []*DefaultExpression {
 	e.mut.Lock()
 	defer e.mut.Unlock()
 	var (
 		stop          func()
-		v             *Expression
-		next          func() (*Expression, bool)
+		v             *DefaultExpression
+		next          func() (*DefaultExpression, bool)
 		thereAreElems = true
-		seq           iter.Seq[*Expression]
-		result        = make([]*Expression, 0)
+		seq           iter.Seq[*DefaultExpression]
+		result        = make([]*DefaultExpression, 0)
 	)
 	seq = maps.Values(e.exprs)
-	next, stop = iter.Pull[*Expression](seq)
+	next, stop = iter.Pull[*DefaultExpression](seq)
 	defer stop()
 	for {
 		v, thereAreElems = next()
@@ -197,14 +204,14 @@ func (e *ExpressionsList) GetAllExprs() []*Expression {
 	return result
 }
 
-func (e *ExpressionsList) Get(id int) (*Expression, bool) {
+func (e *DefaultExpressionsList) Get(id int) (*DefaultExpression, bool) {
 	e.mut.Lock()
 	var result, ok = e.exprs[id]
 	e.mut.Unlock()
 	return result, ok
 }
 
-func (e *ExpressionsList) GetReadyExpr() (expr *Expression) {
+func (e *DefaultExpressionsList) GetReadyExpr() (expr *DefaultExpression) {
 	e.mut.Lock()
 	defer e.mut.Unlock()
 	for _, v := range e.exprs {
@@ -215,19 +222,19 @@ func (e *ExpressionsList) GetReadyExpr() (expr *Expression) {
 	return nil
 }
 
-func CallExpressionListEmptyFabric() *ExpressionsList {
-	return &ExpressionsList{
+func CallEmptyExpressionListFabric() *DefaultExpressionsList {
+	return &DefaultExpressionsList{
 		mut:   sync.Mutex{},
-		exprs: make(map[int]*Expression),
+		exprs: make(map[int]*DefaultExpression),
 	}
 }
 
-func CallExpressionListFabricWithElements(exprs []*Expression) *ExpressionsList {
-	var result = make(map[int]*Expression)
+func CallExpressionListWithElementsFabric(exprs []*DefaultExpression) *DefaultExpressionsList {
+	var result = make(map[int]*DefaultExpression)
 	for _, expr := range exprs {
 		result[expr.ID] = expr
 	}
-	return &ExpressionsList{
+	return &DefaultExpressionsList{
 		mut:   sync.Mutex{},
 		exprs: result,
 	}
