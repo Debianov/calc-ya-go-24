@@ -146,11 +146,11 @@ func (g *GrpcTaskServer) GetTask(_ context.Context, _ *pb.Empty) (result *pb.Tas
 		return nil, status.Errorf(codes.Internal, "%s", err)
 	} else {
 		result = &pb.TaskToSend{
-			PairId:            taskWithTime.GetPairId(),
-			Arg1:              taskWithTime.GetArg1(),
-			Arg2:              taskWithTime.GetArg2(),
-			Operation:         taskWithTime.GetOperation(),
-			OperationDuration: taskWithTime.GetPermissibleDuration(),
+			PairId:              taskWithTime.GetPairId(),
+			Arg1:                taskWithTime.GetArg1(),
+			Arg2:                taskWithTime.GetArg2(),
+			Operation:           taskWithTime.GetOperation(),
+			PermissibleDuration: taskWithTime.GetPermissibleDuration(),
 		}
 		return result, status.Error(codes.OK, "")
 	}

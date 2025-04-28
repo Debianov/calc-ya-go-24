@@ -9,7 +9,7 @@ message TaskToSend {
   int64 Arg1 = 2;
   int64 Arg2 = 3;
   string Operation = 4;
-  string OperationDuration = 5;
+  string PermissibleDuration = 5;
 }
 
 message TaskResult {
