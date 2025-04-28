@@ -126,11 +126,21 @@ func testCalcHandler201(t *testing.T) {
 	for exprInd, expr := range exprs {
 		var tasksListLen = expr.GetTasksHandler().Len()
 		for taskInd := 0; taskInd < tasksListLen; taskInd++ {
+			var (
+				v    interface{}
+				expV interface{}
+			)
 			task := expr.GetTasksHandler().Get(taskInd)
 			assert.Equal(t, task.GetPairId(), expectedTasks[exprInd][taskInd].PairID)
-			assert.Equal(t, interface{}(task.GetArg1()), expectedTasks[exprInd][taskInd].Arg1)
-			assert.Equal(t, interface{}(task.GetArg2()), expectedTasks[exprInd][taskInd].Arg2)
-			assert.Equal(t, task.GetOperation(), expectedTasks[exprInd][taskInd].Operation)
+			v, _ = task.GetArg1()
+			expV, _ = expectedTasks[exprInd][taskInd].GetArg1()
+			assert.Equal(t, expV, v)
+			v, _ = task.GetArg2()
+			expV, _ = expectedTasks[exprInd][taskInd].GetArg2()
+			assert.Equal(t, expV, v)
+			v = task.GetOperation()
+			expV = expectedTasks[exprInd][taskInd].GetOperation()
+			assert.Equal(t, expV, v)
 		}
 	}
 }
