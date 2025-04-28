@@ -58,14 +58,14 @@ func (*Empty) Descriptor() ([]byte, []int) {
 }
 
 type TaskToSend struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PairId        int32                  `protobuf:"varint,1,opt,name=PairId,proto3" json:"PairId,omitempty"`
-	Arg1          int64                  `protobuf:"varint,2,opt,name=Arg1,proto3" json:"Arg1,omitempty"`
-	Arg2          int64                  `protobuf:"varint,3,opt,name=Arg2,proto3" json:"Arg2,omitempty"`
-	Operation         string `protobuf:"bytes,4,opt,name=Operation,proto3" json:"Operation,omitempty"`
-	OperationDuration string `protobuf:"bytes,5,opt,name=OperationDuration,proto3" json:"OperationDuration,omitempty"`
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	PairId            int32                  `protobuf:"varint,1,opt,name=PairId,proto3" json:"PairId,omitempty"`
+	Arg1              int64                  `protobuf:"varint,2,opt,name=Arg1,proto3" json:"Arg1,omitempty"`
+	Arg2              int64                  `protobuf:"varint,3,opt,name=Arg2,proto3" json:"Arg2,omitempty"`
+	Operation         string                 `protobuf:"bytes,4,opt,name=Operation,proto3" json:"Operation,omitempty"`
+	OperationDuration string                 `protobuf:"bytes,5,opt,name=OperationDuration,proto3" json:"OperationDuration,omitempty"`
 	unknownFields     protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *TaskToSend) Reset() {
@@ -190,14 +190,14 @@ var File_proto_internal_proto protoreflect.FileDescriptor
 const file_proto_internal_proto_rawDesc = "" +
 	"\n" +
 	"\x14proto/internal.proto\x12\x04main\"\a\n" +
-	"\x05Empty\"\x90\x01\n" +
+	"\x05Empty\"\x98\x01\n" +
 	"\n" +
 	"TaskToSend\x12\x16\n" +
 	"\x06PairId\x18\x01 \x01(\x05R\x06PairId\x12\x12\n" +
 	"\x04Arg1\x18\x02 \x01(\x03R\x04Arg1\x12\x12\n" +
 	"\x04Arg2\x18\x03 \x01(\x03R\x04Arg2\x12\x1c\n" +
-	"\tOperation\x18\x04 \x01(\tR\tOperation\x12$\n" +
-	"\rOperationDuration\x18\x05 \x01(\tR\rOperationDuration\"<\n" +
+	"\tOperation\x18\x04 \x01(\tR\tOperation\x12,\n" +
+	"\x11OperationDuration\x18\x05 \x01(\tR\x11OperationDuration\"<\n" +
 	"\n" +
 	"TaskResult\x12\x16\n" +
 	"\x06PairId\x18\x01 \x01(\x05R\x06PairId\x12\x16\n" +
