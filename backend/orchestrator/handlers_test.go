@@ -169,9 +169,9 @@ func testCalcHandlerGet(t *testing.T) {
 }
 
 func TestCalcHandler(t *testing.T) {
-	t.Run("TestCalcHandler201", testCalcHandler201)
-	t.Run("TestCalcHandler422", testCalcHandler422)
-	t.Run("TestCalcHandlerGet", testCalcHandlerGet)
+	t.Run("201", testCalcHandler201)
+	t.Run("422", testCalcHandler422)
+	t.Run("Get", testCalcHandlerGet)
 }
 
 func testExpressionsHandler200(t *testing.T) {
@@ -227,9 +227,9 @@ func testExpressionsHandlerEmpty(t *testing.T) {
 }
 
 func TestExpressionHandler(t *testing.T) {
-	t.Run("TestExpressionsHandler200", testExpressionsHandler200)
-	t.Run("TestExpressionsHandlerPost", testExpressionsHandlerPost)
-	t.Run("TestExpressionsHandlerEmpty", testExpressionsHandlerEmpty)
+	t.Run("200", testExpressionsHandler200)
+	t.Run("Post", testExpressionsHandlerPost)
+	t.Run("Empty", testExpressionsHandlerEmpty)
 }
 
 func testExpressionIdHandler200(t *testing.T) {
@@ -308,10 +308,10 @@ func testExpressionIdHandlerEmpty(t *testing.T) {
 }
 
 func TestExpressionIdHandler(t *testing.T) {
-	t.Run("TestExpressionIdHandler200", testExpressionIdHandler200)
-	t.Run("TestExpressionIdHandler404", testExpressionIdHandler404)
-	t.Run("TestExpressionIdHandlerPost", testExpressionIdHandlerPost)
-	t.Run("TestExpressionIdHandlerEmpty", testExpressionIdHandlerEmpty)
+	t.Run("200", testExpressionIdHandler200)
+	t.Run("404", testExpressionIdHandler404)
+	t.Run("Post", testExpressionIdHandlerPost)
+	t.Run("Empty", testExpressionIdHandlerEmpty)
 }
 
 func TestPanicMiddlewareGood(t *testing.T) {
@@ -393,7 +393,7 @@ func TestInternalServerErrorHandler(t *testing.T) {
 //		exprsList = &StubExpressionsList{expressions}
 //	}
 //}
-//
+
 //type StubExpression struct {
 //	ID           int
 //	Status       backend.ExprStatus
@@ -447,7 +447,7 @@ func TestInternalServerErrorHandler(t *testing.T) {
 //	//TODO implement me
 //	panic("implement me")
 //}
-
+//
 //func testGetTaskNotFound(t *testing.T) {
 //	var (
 //		g      = GetDefaultGrpcServer()
@@ -464,7 +464,7 @@ func TestInternalServerErrorHandler(t *testing.T) {
 //		assert.Equal(t, nil, result)
 //	})
 //	t.Run("OnlyNoReadyExprsInList", func(t *testing.T) {
-//		var exprsInList = []*StubExpression{{ID: 0, Status: backend.NoReadyTasks}, {ID: 1, Status: backend.Cancelled}}
+//		var exprsInList = []backend.CommonExpression{{ID: 0, Status: backend.NoReadyTasks}, {ID: 1, Status: backend.Cancelled}}
 //		t.Cleanup(func() {
 //			exprsList = backend.CallEmptyExpressionListFabric()
 //		})
@@ -492,7 +492,7 @@ func TestInternalServerErrorHandler(t *testing.T) {
 //		prepareExprsList(exprsInList...)
 //	})
 //}
-
+//
 //func TestGetTask(t *testing.T) {
 //	t.Run("TestGetTaskNotFound", testGetTaskNotFound)
 //	//t.Run("TestGetTaskOk", testGetTaskOk)
