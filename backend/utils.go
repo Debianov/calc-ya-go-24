@@ -143,12 +143,12 @@ func (t *sentTasks) WrapWithTime(readyTask InternalTask, timeAtSendingTask time.
 
 func (t *sentTasks) PopSentTask(taskId int) (*Task, time.Time, bool) {
 	t.mut.Lock()
-	taskWithTimer, ok := t.buf[taskId]
+	taskWithTime, ok := t.buf[taskId]
 	if ok {
 		delete(t.buf, taskId)
 	}
 	t.mut.Unlock()
-	return taskWithTimer.task, taskWithTimer.timeAtSendingTask, ok
+	return taskWithTime.GetWrappedTask().(*Task), taskWithTime.GetTimeAtSendingTask(), ok
 }
 
 func callSentTasksFabric() *sentTasks {

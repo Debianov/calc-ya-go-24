@@ -150,7 +150,7 @@ func (g *GrpcTaskServer) GetTask(_ context.Context, _ *pb.Empty) (result *pb.Tas
 			Arg1:              taskWithTime.GetArg1(),
 			Arg2:              taskWithTime.GetArg2(),
 			Operation:         taskWithTime.GetOperation(),
-			OperationDuration: taskWithTime.GetOperationDuration(),
+			OperationDuration: taskWithTime.GetPermissibleDuration(),
 		}
 		return result, status.Error(codes.OK, "")
 	}

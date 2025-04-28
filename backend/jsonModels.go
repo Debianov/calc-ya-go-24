@@ -77,6 +77,7 @@ type CommonExpression interface {
 	JsonPayload
 	MarshalId() (result []byte, err error)
 	GetId() int
+	GetStatus() ExprStatus
 	GetReadyGrpcTask() (GrpcTask, error)
 	GetTasksHandler() CommonTasksHandler
 	UpdateTask(taskID int, result int64, timeAtReceiveTask time.Time) (err error)
@@ -108,6 +109,10 @@ func (e *Expression) GetId() int {
 	return e.ID
 }
 
+func (e *Expression) GetStatus() ExprStatus {
+	return e.Status
+}
+
 func (e *Expression) GetReadyGrpcTask() (result GrpcTask, err error) {
 	maybeReadyTask := e.tasksHandler.RegisterFirst()
 	if maybeReadyTask.IsReadyToCalc() {
@@ -134,9 +139,9 @@ func (e *Expression) UpdateTask(taskID int, result int64, timeAtReceiveTask time
 	if !ok {
 		return &TaskIDNotExist{taskID}
 	}
-	if factTime := timeAtReceiveTask.Sub(timeAtSendingTask); factTime > task.GetOperationTime() {
+	if factTime := timeAtReceiveTask.Sub(timeAtSendingTask); factTime > task.GetPermissibleDuration() {
 		e.changeStatus(Cancelled)
-		return &TimeoutExecution{task.GetOperationTime(), factTime, task.GetOperation(),
+		return &TimeoutExecution{task.GetPermissibleDuration(), factTime, task.GetOperation(),
 			task.GetPairId()}
 	}
 	err = task.WriteResult(result)
@@ -268,6 +273,16 @@ func (a *AgentResult) Marshal() (result []byte, err error) {
 	return
 }
 
+type InternalTask interface {
+	CommonTask
+	GetArg1() (int64, bool)
+	GetArg2() (int64, bool)
+	SetArg1(int64)
+	SetArg2(int64)
+	WriteResult(result int64) error
+	GetPermissibleDuration() time.Duration
+}
+
 type Task struct {
 	PairID        int32         `json:"id"`
 	Arg1          interface{}   `json:"arg1"`
@@ -281,6 +296,33 @@ type Task struct {
 
 func (t *Task) GetPairId() int32 {
 	return t.PairID
+}
+
+func (t *Task) GetOperation() string {
+	return t.Operation
+}
+
+func (t *Task) GetStatus() TaskStatus {
+	return t.Status
+}
+
+func (t *Task) GetResult() int64 {
+	return t.result
+}
+
+func (t *Task) SetStatus(newStatus TaskStatus) {
+	t.mut.Lock()
+	defer t.mut.Unlock()
+	if t.Status == newStatus {
+		return
+	}
+	if t.Status != Calculated && t.Status != newStatus {
+		t.Status = newStatus
+	}
+}
+
+func (t *Task) IsReadyToCalc() bool {
+	return t.Status == ReadyToCalc
 }
 
 func (t *Task) GetArg1() (int64, bool) {
@@ -301,18 +343,6 @@ func (t *Task) SetArg2(result int64) {
 	t.Arg2 = result
 }
 
-func (t *Task) GetOperation() string {
-	return t.Operation
-}
-
-func (t *Task) GetOperationTime() time.Duration {
-	return t.OperationTime
-}
-
-func (t *Task) GetResult() int64 {
-	return t.result
-}
-
 func (t *Task) WriteResult(result int64) error {
 	t.mut.Lock()
 	defer t.mut.Unlock()
@@ -326,17 +356,6 @@ func (t *Task) WriteResult(result int64) error {
 	return nil
 }
 
-func (t *Task) SetStatus(newStatus TaskStatus) {
-	t.mut.Lock()
-	defer t.mut.Unlock()
-	if t.Status == newStatus {
-		return
-	}
-	if t.Status != Calculated && t.Status != newStatus {
-		t.Status = newStatus
-	}
-}
-
-func (t *Task) IsReadyToCalc() bool {
-	return t.Status == ReadyToCalc
+func (t *Task) GetPermissibleDuration() time.Duration {
+	return t.OperationTime
 }

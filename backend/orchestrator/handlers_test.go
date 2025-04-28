@@ -4,11 +4,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/Debianov/calc-ya-go-24/backend"
+	pb "github.com/Debianov/calc-ya-go-24/backend/proto"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -169,8 +173,8 @@ func testCalcHandlerGet(t *testing.T) {
 }
 
 func TestCalcHandler(t *testing.T) {
-	t.Run("201", testCalcHandler201)
-	t.Run("422", testCalcHandler422)
+	t.Run("201Code", testCalcHandler201)
+	t.Run("422Code", testCalcHandler422)
 	t.Run("Get", testCalcHandlerGet)
 }
 
@@ -227,7 +231,7 @@ func testExpressionsHandlerEmpty(t *testing.T) {
 }
 
 func TestExpressionHandler(t *testing.T) {
-	t.Run("200", testExpressionsHandler200)
+	t.Run("200Code", testExpressionsHandler200)
 	t.Run("Post", testExpressionsHandlerPost)
 	t.Run("Empty", testExpressionsHandlerEmpty)
 }
@@ -308,8 +312,8 @@ func testExpressionIdHandlerEmpty(t *testing.T) {
 }
 
 func TestExpressionIdHandler(t *testing.T) {
-	t.Run("200", testExpressionIdHandler200)
-	t.Run("404", testExpressionIdHandler404)
+	t.Run("200Code", testExpressionIdHandler200)
+	t.Run("404Code", testExpressionIdHandler404)
 	t.Run("Post", testExpressionIdHandlerPost)
 	t.Run("Empty", testExpressionIdHandlerEmpty)
 }
@@ -363,116 +367,23 @@ func TestInternalServerErrorHandler(t *testing.T) {
 	}
 }
 
-//type StubExpressionsList struct {
-//	buf []backend.CommonExpression
-//}
-//
-//func (s *StubExpressionsList) AddExprFabric(postfix []string) (newExpr *backend.CommonExpression, newId int) {
-//	//TODO implement me
-//	panic("implement me")
-//}
-//
-//func (s *StubExpressionsList) GetAllExprs() []*backend.CommonExpression {
-//	//TODO implement me
-//	panic("implement me")
-//}
-//
-//func (s *StubExpressionsList) Get(id int) (*backend.CommonExpression, bool) {
-//	//TODO implement me
-//	panic("implement me")
-//}
-//
-//func (s *StubExpressionsList) GetReadyExpr() (expr *backend.CommonExpression) {
-//	panic("implement me")
-//}
-//
-//func prepareExprsList(expressions ...backend.CommonExpression) {
-//	if len(expressions) != 0 {
-//		exprsList = &StubExpressionsList{}
-//	} else {
-//		exprsList = &StubExpressionsList{expressions}
-//	}
-//}
+func testGetTaskNotFoundCode(t *testing.T) {
+	var (
+		g      = GetDefaultGrpcServer()
+		result *pb.TaskToSend
+		err    error
+	)
+	t.Cleanup(func() {
+		exprsList = backend.CallEmptyExpressionListFabric()
+	})
+	exprsList = callStubExprsListFabric()
+	result, err = g.GetTask(context.TODO(), &pb.Empty{})
+	assert.Equal(t, codes.NotFound, status.Code(err))
+	nilToTaskToSend := (*pb.TaskToSend)(nil) // возвращается не просто nil
+	assert.Equal(t, nilToTaskToSend, result)
+}
 
-//type StubExpression struct {
-//	ID           int
-//	Status       backend.ExprStatus
-//	TasksHandler backend.CommonTasksHandler
-//}
-//
-//func (s *StubExpression) Marshal() (result []byte, err error) {
-//	//TODO implement me
-//	panic("implement me")
-//}
-//
-//func (s *StubExpression) DivideIntoTasks() {
-//	//TODO implement me
-//	panic("implement me")
-//}
-//
-//func (s *StubExpression) GetReadyTask() backend.TaskWithTime {
-//	//TODO implement me
-//	panic("implement me")
-//}
-//
-//func (s *StubExpression) MarshalID() (result []byte, err error) {
-//	//TODO implement me
-//	panic("implement me")
-//}
-//
-//func (s *StubExpression) UpdateTask(taskID int, result int64, timeAtReceiveTask time.Time) (err error) {
-//	//TODO implement me
-//	panic("implement me")
-//}
-//
-//func (s *StubExpression) GetTasksHandler() *backend.TasksHandler {
-//	//TODO implement me
-//	panic("implement me")
-//}
-//
-//type StubTasksHandler struct {
-//	Buf map[int]*backend.CommonTask
-//}
-//
-//func (s *StubTasksHandler) Get(ind int) *backend.CommonTask {
-//	return s.Buf[ind]
-//}
-//
-//func (s *StubTasksHandler) Len() int {
-//	//TODO implement me
-//	panic("implement me")
-//}
-//
-//func (s *StubTasksHandler) CountUpdatedTask() {
-//	//TODO implement me
-//	panic("implement me")
-//}
-//
-//func testGetTaskNotFound(t *testing.T) {
-//	var (
-//		g      = GetDefaultGrpcServer()
-//		result *pb.TaskToSend
-//		err    error
-//	)
-//	t.Run("EmptyExprsList", func(t *testing.T) { // TODO t.Run name renaming
-//		t.Cleanup(func() {
-//			exprsList = backend.CallEmptyExpressionListFabric()
-//		})
-//		prepareExprsList[*StubExpression]()
-//		result, err = g.GetTask(context.TODO(), &pb.Empty{})
-//		assert.Equal(t, codes.NotFound, status.Code(err))
-//		assert.Equal(t, nil, result)
-//	})
-//	t.Run("OnlyNoReadyExprsInList", func(t *testing.T) {
-//		var exprsInList = []backend.CommonExpression{{ID: 0, Status: backend.NoReadyTasks}, {ID: 1, Status: backend.Cancelled}}
-//		t.Cleanup(func() {
-//			exprsList = backend.CallEmptyExpressionListFabric()
-//		})
-//		prepareExprsList(exprsInList...)
-//		result, err = g.GetTask(context.TODO(), &pb.Empty{})
-//		assert.Equal(t, codes.NotFound, status.Code(err))
-//		assert.Equal(t, nil, result)
-//	})
+//func testGetTaskOk(t *testing.T) {
 //	t.Run("ReadyAndNotReadyExprsInList", func(t *testing.T) {
 //		var (
 //			expectedResult = backend.CommonTask(&pb.TaskToSend{
@@ -480,7 +391,23 @@ func TestInternalServerErrorHandler(t *testing.T) {
 //				Arg1:              2,
 //				Arg2:              5,
 //				Operation:         "+",
-//				OperationDuration: "3s", // default value from config.go
+//				OperationDuration: "2s",
+//			},
+//			)
+//			exprsInList = []*StubExpression{{ID: 0, Status: backend.NoReadyTasks}, {ID: 1, Status: backend.Cancelled},
+//				{ID: 2, Status: backend.Ready, TasksHandler: &StubTasksHandler{map[int]*backend.CommonTask{0: &expectedResult}}}}
+//		)
+//
+//		callStubExprsListFabric(exprsInList...)
+//	})
+//	t.Run("OnlyReadyExprsInList", func(t *testing.T) {
+//		var (
+//			expectedResult = backend.CommonTask(&pb.TaskToSend{
+//				PairId:            0,
+//				Arg1:              2,
+//				Arg2:              5,
+//				Operation:         "+",
+//				OperationDuration: "2s",
 //			},
 //			)
 //			exprsInList = []*StubExpression{{ID: 0, Status: backend.NoReadyTasks}, {ID: 1, Status: backend.Cancelled},
@@ -489,11 +416,12 @@ func TestInternalServerErrorHandler(t *testing.T) {
 //		t.Cleanup(func() {
 //			exprsList = backend.CallEmptyExpressionListFabric()
 //		})
-//		prepareExprsList(exprsInList...)
+//		callStubExprsListFabric(exprsInList...)
 //	})
 //}
-//
-//func TestGetTask(t *testing.T) {
-//	t.Run("TestGetTaskNotFound", testGetTaskNotFound)
-//	//t.Run("TestGetTaskOk", testGetTaskOk)
-//}
+
+func TestGetTask(t *testing.T) {
+	t.Run("NotFoundCode", testGetTaskNotFoundCode)
+	//t.Run("Internal", testGetTaskInternalCode)
+	//t.Run("OkCode", testGetTaskOkCode)
+}
