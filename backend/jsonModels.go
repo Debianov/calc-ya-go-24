@@ -273,14 +273,20 @@ func (a *AgentResult) Marshal() (result []byte, err error) {
 	return
 }
 
+// InternalTask реализует Task, которые обращаются исключительно внутри оркестратора.
 type InternalTask interface {
 	CommonTask
 	GetArg1() (int64, bool)
 	GetArg2() (int64, bool)
+	GetOperation() string
+	GetResult() int64
+	GetStatus() TaskStatus
+	SetStatus(newStatus TaskStatus)
+	IsReadyToCalc() bool
+	GetPermissibleDuration() time.Duration
 	SetArg1(int64)
 	SetArg2(int64)
 	WriteResult(result int64) error
-	GetPermissibleDuration() time.Duration
 }
 
 type Task struct {

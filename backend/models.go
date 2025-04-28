@@ -7,19 +7,14 @@ import (
 type CommonTask interface {
 	GetPairId() int32
 	GetOperation() string
-	GetStatus() TaskStatus
-	GetResult() int64
-	SetStatus(newStatus TaskStatus)
-	IsReadyToCalc() bool
 }
 
+// GrpcTask должен реализовывать только TaskWithTime, его stub-ы и orchestrator.TaskToSend
 type GrpcTask interface {
 	CommonTask
 	GetArg1() int64
 	GetArg2() int64
 	GetPermissibleDuration() string
-	GetWrappedTask() InternalTask
-	GetTimeAtSendingTask() time.Time
 }
 
 type TaskWithTime struct {
