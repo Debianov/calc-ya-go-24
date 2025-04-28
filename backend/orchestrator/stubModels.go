@@ -107,7 +107,7 @@ func (s *StubExpression) DivideIntoTasks() {
 }
 
 type StubTasksHandler struct {
-	Buf map[int]backend.CommonTask
+	Buf map[int]backend.InternalTask
 }
 
 func (s *StubTasksHandler) Add(task backend.InternalTask) {
@@ -146,53 +146,21 @@ type StubTaskWithTime struct {
 }
 
 func (s *StubTaskWithTime) GetPairId() int32 {
-	//TODO implement me
-	panic("implement me")
+	return s.Task.GetPairId()
 }
 
 func (s *StubTaskWithTime) GetOperation() string {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *StubTaskWithTime) GetStatus() backend.TaskStatus {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *StubTaskWithTime) GetResult() int64 {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *StubTaskWithTime) SetStatus(newStatus backend.TaskStatus) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *StubTaskWithTime) IsReadyToCalc() bool {
-	//TODO implement me
-	panic("implement me")
+	return s.Task.GetOperation()
 }
 
 func (s *StubTaskWithTime) GetArg1() int64 {
-	//TODO implement me
-	panic("implement me")
+	return s.Task.Arg1.(int64)
 }
 
 func (s *StubTaskWithTime) GetArg2() int64 {
-	//TODO implement me
-	panic("implement me")
+	return s.Task.Arg2.(int64)
 }
 
 func (s *StubTaskWithTime) GetPermissibleDuration() string {
-	panic("implement me")
-}
-
-func (s *StubTaskWithTime) GetWrappedTask() backend.InternalTask {
-	panic("implement me")
-}
-
-func (s *StubTaskWithTime) GetTimeAtSendingTask() time.Time {
-	panic("implement me")
+	return s.Task.GetPermissibleDuration().String()
 }

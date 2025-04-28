@@ -177,12 +177,12 @@ func (e *Expression) DivideIntoTasks() {
 			)
 			if stack.Len() >= 2 {
 				newTask = &Task{PairID: newId, Arg2: stack.Pop(), Arg1: stack.Pop(),
-					Operation: r, OperationTime: e.getOperationTime(r), Status: ReadyToCalc}
+					Operation: r, PermissibleTime: e.getOperationTime(r), Status: ReadyToCalc}
 			} else if stack.Len() == 1 {
 				newTask = &Task{PairID: newId, Arg2: stack.Pop(), Operation: r,
-					OperationTime: e.getOperationTime(r), Status: WaitingOtherTasks}
+					PermissibleTime: e.getOperationTime(r), Status: WaitingOtherTasks}
 			} else {
-				newTask = &Task{PairID: newId, Operation: r, OperationTime: e.getOperationTime(r),
+				newTask = &Task{PairID: newId, Operation: r, PermissibleTime: e.getOperationTime(r),
 					Status: WaitingOtherTasks}
 			}
 			e.tasksHandler.Add(newTask)
@@ -293,9 +293,9 @@ type Task struct {
 	PairID        int32         `json:"id"`
 	Arg1          interface{}   `json:"arg1"`
 	Arg2          interface{}   `json:"arg2"`
-	Operation     string        `json:"operation"`
-	OperationTime time.Duration `json:"operationTime"`
-	result        int64
+	Operation       string        `json:"operation"`
+	PermissibleTime time.Duration `json:"operationTime"`
+	result          int64
 	Status        TaskStatus
 	mut           sync.Mutex
 }
@@ -363,5 +363,5 @@ func (t *Task) WriteResult(result int64) error {
 }
 
 func (t *Task) GetPermissibleDuration() time.Duration {
-	return t.OperationTime
+	return t.PermissibleTime
 }
