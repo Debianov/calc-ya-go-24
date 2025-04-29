@@ -109,15 +109,16 @@ func testCalcHandler201(t *testing.T) {
 	testThroughHttpHandler(calcHandler, t, commonHttpCase)
 
 	var (
-		expectedLen   = len(expectedResponses)
-		expectedTasks = [][]backend.Task{{{PairID: 0, Arg1: int64(2), Arg2: int64(4), Operation: "*",
-			Status: backend.ReadyToCalc}, {PairID: 1, Arg2: int64(2), Operation: "+", Status: backend.WaitingOtherTasks}},
-			{{PairID: 2, Arg1: int64(4), Arg2: int64(2), Operation: "*", Status: backend.ReadyToCalc}, {PairID: 3,
-				Arg1: int64(3), Arg2: int64(5), Operation: "*", Status: backend.ReadyToCalc},
-				{PairID: 5, Operation: "+", Status: backend.WaitingOtherTasks}},
-		}
+		expectedLen               = len(expectedResponses)
+		expectedTasksForFirstExpr = []backend.Task{*backend.CallTaskFabric(0, int64(2), int64(4), "*",
+			backend.ReadyToCalc), *backend.CallTaskFabric(1, nil, int64(2), "+",
+			backend.WaitingOtherTasks)}
+		expectedTasksForSecondExpr = []backend.Task{*backend.CallTaskFabric(2, int64(4), int64(2), "*",
+			backend.ReadyToCalc), *backend.CallTaskFabric(3, int64(3), int64(5), "*",
+			backend.ReadyToCalc), *backend.CallTaskFabric(5, nil, nil, "+",
+			backend.WaitingOtherTasks)}
+		expectedTasks = [][]backend.Task{expectedTasksForFirstExpr, expectedTasksForSecondExpr}
 	)
-
 	exprs := exprsList.GetAllExprs()
 	slices.SortFunc(exprs, func(expression backend.CommonExpression, expression2 backend.CommonExpression) int {
 		if expression.GetId() >= expression2.GetId() {
@@ -135,7 +136,7 @@ func testCalcHandler201(t *testing.T) {
 				expV interface{}
 			)
 			task := expr.GetTasksHandler().Get(taskInd)
-			assert.Equal(t, task.GetPairId(), expectedTasks[exprInd][taskInd].PairID)
+			assert.Equal(t, task.GetPairId(), expectedTasks[exprInd][taskInd].GetPairId())
 			v, _ = task.GetArg1()
 			expV, _ = expectedTasks[exprInd][taskInd].GetArg1()
 			assert.Equal(t, expV, v)
@@ -413,28 +414,23 @@ func testGetTaskOkCode(t *testing.T) {
 		exprsList = backend.CallEmptyExpressionListFabric()
 	})
 	var (
-		expectedTask = backend.Task{
-			PairID:          0,
-			Arg1:            int64(2),
-			Arg2:            int64(4),
-			Operation:       "+",
-			PermissibleTime: 0,
-			Status:          backend.ReadyToCalc,
-		}
+		expectedTask = backend.CallTaskFabric(0, int64(2), int64(4), "+", backend.ReadyToCalc)
 	)
 	exprsList = callStubExprsListFabric(StubExpression{
 		ID:           0,
 		Status:       backend.Ready,
-		TasksHandler: StubTasksHandler{Buf: map[int]backend.InternalTask{0: &expectedTask}}})
+		TasksHandler: StubTasksHandler{Buf: map[int]backend.InternalTask{0: expectedTask}}})
 	result, err = g.GetTask(context.TODO(), &pb.Empty{})
 	assert.Equal(t, codes.OK, status.Code(err))
+	arg1, _ := expectedTask.GetArg1()
+	arg2, _ := expectedTask.GetArg2()
 	var (
 		wrappedTask = &pb.TaskToSend{
-			PairId:              expectedTask.PairID,
-			Arg1:                expectedTask.Arg1.(int64),
-			Arg2:                expectedTask.Arg2.(int64),
-			Operation:           expectedTask.Operation,
-			PermissibleDuration: expectedTask.PermissibleTime.String(),
+			PairId:              expectedTask.GetPairId(),
+			Arg1:                arg1,
+			Arg2:                arg2,
+			Operation:           expectedTask.GetOperation(),
+			PermissibleDuration: expectedTask.GetPermissibleDuration().String(),
 		}
 	)
 	assert.EqualExportedValues(t, wrappedTask, result)

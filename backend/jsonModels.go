@@ -8,6 +8,7 @@ import (
 	"log"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -144,10 +145,7 @@ func (e *Expression) UpdateTask(taskID int, result int64, timeAtReceiveTask time
 		return &TimeoutExecution{task.GetPermissibleDuration(), factTime, task.GetOperation(),
 			task.GetPairId()}
 	}
-	err = task.WriteResult(result)
-	if err != nil {
-		log.Panic(err)
-	}
+	task.SetResult(result)
 	// UpdateExpression
 	e.tasksHandler.CountUpdatedTask()
 	if e.tasksHandler.Len() == 1 {
@@ -176,14 +174,14 @@ func (e *Expression) DivideIntoTasks() {
 				newTask InternalTask
 			)
 			if stack.Len() >= 2 {
-				newTask = &Task{PairID: newId, Arg2: stack.Pop(), Arg1: stack.Pop(),
-					Operation: r, PermissibleTime: e.getOperationTime(r), Status: ReadyToCalc}
+				arg2 := stack.Pop()
+				arg1 := stack.Pop()
+				newTask = CallTaskFabricWithTime(newId, arg1, arg2, r, e.getPermissibleTime(r), ReadyToCalc)
 			} else if stack.Len() == 1 {
-				newTask = &Task{PairID: newId, Arg2: stack.Pop(), Operation: r,
-					PermissibleTime: e.getOperationTime(r), Status: WaitingOtherTasks}
+				newTask = CallTaskFabricWithTime(newId, nil, stack.Pop(), r, e.getPermissibleTime(r),
+					WaitingOtherTasks)
 			} else {
-				newTask = &Task{PairID: newId, Operation: r, PermissibleTime: e.getOperationTime(r),
-					Status: WaitingOtherTasks}
+				newTask = CallTaskFabricWithTime(newId, nil, nil, r, e.getPermissibleTime(r), WaitingOtherTasks)
 			}
 			e.tasksHandler.Add(newTask)
 			operatorCount++
@@ -196,7 +194,7 @@ func (e *Expression) generateId(operatorCount int) int32 {
 	return int32(pkg.Pair(e.ID, operatorCount))
 }
 
-func (e *Expression) getOperationTime(currentOperator string) (result time.Duration) {
+func (e *Expression) getPermissibleTime(currentOperator string) (result time.Duration) {
 	var (
 		operatorAndEnvNamePairs = map[string]EnvVar{"+": *CallEnvVarFabric("TIME_ADDITION", "2s"),
 			"-": *CallEnvVarFabric("TIME_SUBTRACTION", "2s"),
@@ -273,7 +271,10 @@ func (a *AgentResult) Marshal() (result []byte, err error) {
 	return
 }
 
-// InternalTask реализует Task, которые обращаются исключительно внутри оркестратора.
+/*
+InternalTask реализует Task-и, которые обращаются исключительно внутри оркестратора и не используются
+для передачи через GRPC.
+*/
 type InternalTask interface {
 	CommonTask
 	GetArg1() (int64, bool)
@@ -286,82 +287,91 @@ type InternalTask interface {
 	GetPermissibleDuration() time.Duration
 	SetArg1(int64)
 	SetArg2(int64)
-	WriteResult(result int64) error
+	SetResult(result int64) bool
 }
 
 type Task struct {
-	PairID          int32         `json:"id"`
-	Arg1            interface{}   `json:"arg1"`
-	Arg2            interface{}   `json:"arg2"`
-	Operation       string        `json:"operation"`
-	PermissibleTime time.Duration `json:"operationTime"`
-	result          int64
-	Status          TaskStatus
+	pairID          int32
+	arg1            interface{}
+	arg2            interface{}
+	operation       string
+	permissibleTime time.Duration
+	status          atomic.Value
+	result          atomic.Int64
 	mut             sync.Mutex
 }
 
 func (t *Task) GetPairId() int32 {
-	return t.PairID
+	return t.pairID
 }
 
 func (t *Task) GetOperation() string {
-	return t.Operation
+	return t.operation
 }
 
 func (t *Task) GetStatus() TaskStatus {
-	return t.Status
+	return t.status.Load().(TaskStatus)
 }
 
 func (t *Task) GetResult() int64 {
-	return t.result
+	return t.result.Load()
 }
 
 func (t *Task) SetStatus(newStatus TaskStatus) {
-	t.mut.Lock()
-	defer t.mut.Unlock()
-	if t.Status == newStatus {
-		return
-	}
-	if t.Status != Calculated && t.Status != newStatus {
-		t.Status = newStatus
-	}
+	t.status.CompareAndSwap(t.status.Load(), newStatus)
 }
 
 func (t *Task) IsReadyToCalc() bool {
-	return t.Status == ReadyToCalc
+	return t.status.Load().(TaskStatus) == ReadyToCalc
 }
 
 func (t *Task) GetArg1() (int64, bool) {
-	v, ok := t.Arg1.(int64)
+	v, ok := t.arg1.(int64)
 	return v, ok
 }
 
 func (t *Task) GetArg2() (int64, bool) {
-	v, ok := t.Arg2.(int64)
+	v, ok := t.arg2.(int64)
 	return v, ok
 }
 
 func (t *Task) SetArg1(result int64) {
-	t.Arg1 = result
+	t.arg1 = result
 }
 
 func (t *Task) SetArg2(result int64) {
-	t.Arg2 = result
+	t.arg2 = result
 }
 
-func (t *Task) WriteResult(result int64) error {
-	t.mut.Lock()
-	defer t.mut.Unlock()
-	if t.Status == Sent {
-		t.result = result
-		t.Status = Calculated
-	} else if t.Status == Calculated {
-		return errors.New("BUG: разработчиком ожидается, что результат одной и той же задачи не может быть записан" +
-			" больше одного раза")
-	}
-	return nil
+func (t *Task) SetResult(result int64) bool {
+	return t.result.CompareAndSwap(t.result.Load(), result)
 }
 
 func (t *Task) GetPermissibleDuration() time.Duration {
-	return t.PermissibleTime
+	return t.permissibleTime
+}
+
+func CallTaskFabric(pairId int32, arg1 interface{}, arg2 interface{}, operation string,
+	status TaskStatus) (newInstance *Task) {
+	newInstance = &Task{
+		pairID:    pairId,
+		arg1:      arg1,
+		arg2:      arg2,
+		operation: operation,
+	}
+	newInstance.SetStatus(status)
+	return newInstance
+}
+
+func CallTaskFabricWithTime(pairId int32, arg1 interface{}, arg2 interface{}, operation string, permissibleTime time.Duration,
+	status TaskStatus) (newInstance *Task) {
+	newInstance = &Task{
+		pairID:          pairId,
+		arg1:            arg1,
+		arg2:            arg2,
+		operation:       operation,
+		permissibleTime: permissibleTime,
+	}
+	newInstance.SetStatus(status)
+	return newInstance
 }

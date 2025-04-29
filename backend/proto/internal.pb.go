@@ -60,9 +60,9 @@ func (*Empty) Descriptor() ([]byte, []int) {
 type TaskToSend struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	PairId              int32                  `protobuf:"varint,1,opt,name=PairId,proto3" json:"PairId,omitempty"`
-	Arg1                int64                  `protobuf:"varint,2,opt,name=Arg1,proto3" json:"Arg1,omitempty"`
-	Arg2                int64                  `protobuf:"varint,3,opt,name=Arg2,proto3" json:"Arg2,omitempty"`
-	Operation           string                 `protobuf:"bytes,4,opt,name=Operation,proto3" json:"Operation,omitempty"`
+	Arg1                int64                  `protobuf:"varint,2,opt,name=arg1,proto3" json:"arg1,omitempty"`
+	Arg2                int64                  `protobuf:"varint,3,opt,name=arg2,proto3" json:"arg2,omitempty"`
+	Operation           string                 `protobuf:"bytes,4,opt,name=operation,proto3" json:"operation,omitempty"`
 	PermissibleDuration string                 `protobuf:"bytes,5,opt,name=PermissibleDuration,proto3" json:"PermissibleDuration,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
@@ -196,7 +196,7 @@ const file_proto_internal_proto_rawDesc = "" +
 	"\x06PairId\x18\x01 \x01(\x05R\x06PairId\x12\x12\n" +
 	"\x04Arg1\x18\x02 \x01(\x03R\x04Arg1\x12\x12\n" +
 	"\x04Arg2\x18\x03 \x01(\x03R\x04Arg2\x12\x1c\n" +
-	"\tOperation\x18\x04 \x01(\tR\tOperation\x120\n" +
+	"\toperation\x18\x04 \x01(\tR\toperation\x120\n" +
 	"\x13PermissibleDuration\x18\x05 \x01(\tR\x13PermissibleDuration\"<\n" +
 	"\n" +
 	"TaskResult\x12\x16\n" +

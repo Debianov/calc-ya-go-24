@@ -154,11 +154,13 @@ func (s *StubTaskWithTime) GetOperation() string {
 }
 
 func (s *StubTaskWithTime) GetArg1() int64 {
-	return s.Task.Arg1.(int64)
+	v, _ := s.Task.GetArg1()
+	return v
 }
 
 func (s *StubTaskWithTime) GetArg2() int64 {
-	return s.Task.Arg2.(int64)
+	v, _ := s.Task.GetArg2()
+	return v
 }
 
 func (s *StubTaskWithTime) GetPermissibleDuration() string {

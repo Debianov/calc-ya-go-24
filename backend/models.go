@@ -54,11 +54,11 @@ func (t *TaskWithTime) IsReadyToCalc() bool {
 }
 
 func (t *TaskWithTime) GetArg1() int64 {
-	return t.task.Arg1.(int64)
+	return t.task.arg1.(int64)
 }
 
 func (t *TaskWithTime) GetArg2() int64 {
-	return t.task.Arg2.(int64)
+	return t.task.arg2.(int64)
 }
 
 func (t *TaskWithTime) GetPermissibleDuration() string {
@@ -88,7 +88,7 @@ type CommonTasksHandler interface {
 // для дальнейшей обработки.
 // Для работы с TaskWithTime встроена отдельная структура.
 type TasksHandler struct {
-	sentTasks                          *sentTasks
+	sentTasks                          *sentTasksHandler
 	buf                                []*Task
 	tasksCountBeforeWaitingTask        int
 	updatedTasksCountBeforeWaitingTask int
@@ -189,13 +189,13 @@ func (t *TasksHandler) PopSentTask(taskId int) (InternalTask, time.Time, bool) {
 	return t.sentTasks.PopSentTask(taskId)
 }
 
-// sentTasks — map для работы с TaskWithTime структурой.
-type sentTasks struct {
+// sentTasksHandler — map для работы с TaskWithTime структурой.
+type sentTasksHandler struct {
 	buf map[int]TaskWithTime
 	mut sync.Mutex
 }
 
-func (t *sentTasks) WrapWithTime(readyTask InternalTask, timeAtSendingTask time.Time) (result TaskWithTime) {
+func (t *sentTasksHandler) WrapWithTime(readyTask InternalTask, timeAtSendingTask time.Time) (result TaskWithTime) {
 	result = TaskWithTime{
 		task:              readyTask.(*Task),
 		timeAtSendingTask: timeAtSendingTask,
@@ -206,7 +206,7 @@ func (t *sentTasks) WrapWithTime(readyTask InternalTask, timeAtSendingTask time.
 	return
 }
 
-func (t *sentTasks) PopSentTask(taskId int) (*Task, time.Time, bool) {
+func (t *sentTasksHandler) PopSentTask(taskId int) (*Task, time.Time, bool) {
 	t.mut.Lock()
 	taskWithTime, ok := t.buf[taskId]
 	if ok {
@@ -216,13 +216,13 @@ func (t *sentTasks) PopSentTask(taskId int) (*Task, time.Time, bool) {
 	return taskWithTime.GetWrappedTask().(*Task), taskWithTime.GetTimeAtSendingTask(), ok
 }
 
-func CallSentTasksFabric() *sentTasks {
-	return &sentTasks{
+func CallSentTasksFabric() *sentTasksHandler {
+	return &sentTasksHandler{
 		buf: make(map[int]TaskWithTime),
 	}
 }
 
-func CallTasksFabric() *TasksHandler {
+func CallTasksHandlerFabric() *TasksHandler {
 	newSentTasks := CallSentTasksFabric()
 	return &TasksHandler{sentTasks: newSentTasks}
 }
@@ -241,7 +241,7 @@ type ExpressionsList struct {
 
 func (e *ExpressionsList) AddExprFabric(postfix []string) (newExpr CommonExpression, newId int) {
 	newId = e.generateId()
-	newTaskSpace := CallTasksFabric()
+	newTaskSpace := CallTasksHandlerFabric()
 	newExpr = &Expression{postfix: postfix, ID: newId, Status: Ready, tasksHandler: newTaskSpace}
 	newExpr.DivideIntoTasks()
 	e.mut.Lock()
