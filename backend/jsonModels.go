@@ -290,14 +290,14 @@ type InternalTask interface {
 }
 
 type Task struct {
-	PairID        int32         `json:"id"`
-	Arg1          interface{}   `json:"arg1"`
-	Arg2          interface{}   `json:"arg2"`
+	PairID          int32         `json:"id"`
+	Arg1            interface{}   `json:"arg1"`
+	Arg2            interface{}   `json:"arg2"`
 	Operation       string        `json:"operation"`
 	PermissibleTime time.Duration `json:"operationTime"`
 	result          int64
-	Status        TaskStatus
-	mut           sync.Mutex
+	Status          TaskStatus
+	mut             sync.Mutex
 }
 
 func (t *Task) GetPairId() int32 {
