@@ -7,7 +7,6 @@ import (
 	"go/types"
 	"log"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -40,24 +39,6 @@ func (r RequestNilJson) Marshal() (result []byte, err error) {
 	return nil, nil
 }
 
-type OKJson struct {
-	Result float64 `json:"result"`
-}
-
-func (o OKJson) Marshal() (result []byte, err error) {
-	result, err = json.Marshal(&o)
-	return
-}
-
-type ErrorJson struct {
-	Error string `json:"error"`
-}
-
-func (e ErrorJson) Marshal() (result []byte, err error) {
-	result, err = json.Marshal(&e)
-	return
-}
-
 type EmptyJson struct {
 }
 
@@ -75,58 +56,72 @@ const (
 )
 
 type CommonExpression interface {
-	JsonPayload
-	MarshalId() (result []byte, err error)
 	GetId() int
 	GetStatus() ExprStatus
 	GetReadyGrpcTask() (GrpcTask, error)
+	GetResult() int64
 	GetTasksHandler() CommonTasksHandler
 	UpdateTask(taskID int, result int64, timeAtReceiveTask time.Time) (err error)
+	JsonPayload
+	MarshalId() (result []byte, err error)
 	DivideIntoTasks()
 }
 
 type Expression struct {
+	Id           int          `json:"id"`
+	Status       atomic.Value `json:"status"`
+	Result       atomic.Int64 `json:"result"`
 	postfix      []string
-	ID           int        `json:"id"`
-	Status       ExprStatus `json:"status"`
-	Result       int64      `json:"result"`
 	tasksHandler *TasksHandler
-	mut          sync.Mutex
+}
+
+func (e *Expression) MarshalJSON() (result []byte, err error) {
+	toMarshal := struct {
+		Id     int        `json:"id"`
+		Status ExprStatus `json:"status"`
+		Result int64      `json:"result"`
+	}{e.Id, e.GetStatus(), e.GetResult()}
+	return json.Marshal(&toMarshal)
 }
 
 func (e *Expression) Marshal() (result []byte, err error) {
-	result, err = json.Marshal(&e)
+	result, err = json.Marshal(e)
 	return
 }
 
 func (e *Expression) MarshalId() (result []byte, err error) {
 	result, err = json.Marshal(&struct {
 		ID int `json:"id"`
-	}{e.ID})
+	}{e.Id})
 	return
 }
 
 func (e *Expression) GetId() int {
-	return e.ID
+	return e.Id
 }
 
+// GetStatus потокобезопасен. Не используйте прямой доступ к Status.
 func (e *Expression) GetStatus() ExprStatus {
-	return e.Status
+	return e.Status.Load().(ExprStatus)
+}
+
+func (e *Expression) GetResult() int64 {
+	return e.Result.Load()
 }
 
 func (e *Expression) GetReadyGrpcTask() (result GrpcTask, err error) {
 	maybeReadyTask := e.tasksHandler.RegisterFirst()
 	if maybeReadyTask.IsReadyToCalc() {
 		if e.tasksHandler.Len() == 1 {
-			e.changeStatus(NoReadyTasks)
+			e.updateStatus(NoReadyTasks)
 		} else {
-			e.changeStatus(Ready)
+			e.updateStatus(Ready)
 		}
 		taskWithTime := e.tasksHandler.sentTasks.WrapWithTime(maybeReadyTask, time.Now())
 		taskWithTime.SetStatus(Sent)
 		return &taskWithTime, nil
 	} else {
-		return nil, errors.New("(bug) разработчиком ожидается, что выданный expr (id %d) " +
+		return nil, errors.New("(bug) разработчиком ожидается, что выданный expr (Id %d) " +
 			"будет иметь хотя бы 1 готовый к отправке task")
 	}
 }
@@ -141,16 +136,15 @@ func (e *Expression) UpdateTask(taskID int, result int64, timeAtReceiveTask time
 		return &TaskIDNotExist{taskID}
 	}
 	if factTime := timeAtReceiveTask.Sub(timeAtSendingTask); factTime > task.GetPermissibleDuration() {
-		e.changeStatus(Cancelled)
+		e.updateStatus(Cancelled)
 		return &TimeoutExecution{task.GetPermissibleDuration(), factTime, task.GetOperation(),
 			task.GetPairId()}
 	}
 	task.SetResult(result)
-	// UpdateExpression
 	e.tasksHandler.CountUpdatedTask()
 	if e.tasksHandler.Len() == 1 {
-		e.changeStatus(Completed)
-		e.writeResult(task.GetResult())
+		e.updateStatus(Completed)
+		e.setResult(task.GetResult())
 	}
 	return
 }
@@ -191,7 +185,7 @@ func (e *Expression) DivideIntoTasks() {
 }
 
 func (e *Expression) generateId(operatorCount int) int32 {
-	return int32(pkg.Pair(e.ID, operatorCount))
+	return int32(pkg.Pair(e.Id, operatorCount))
 }
 
 func (e *Expression) getPermissibleTime(currentOperator string) (result time.Duration) {
@@ -215,23 +209,14 @@ func (e *Expression) getPermissibleTime(currentOperator string) (result time.Dur
 	return
 }
 
-func (e *Expression) changeStatus(status ExprStatus) {
-	e.mut.Lock()
-	defer e.mut.Unlock()
-	if e.Status == status {
-		return
-	}
-	if e.Status != Completed && e.Status != Cancelled {
-		e.Status = status
-	} else {
-		log.Printf("попытка изменения статуса выражения %d, когда его статус %v", e.ID, e.Status)
-	}
+// updateStatus потокобезопасен
+func (e *Expression) updateStatus(status ExprStatus) bool {
+	return e.Status.CompareAndSwap(e.Status.Load(), status)
 }
 
-func (e *Expression) writeResult(result int64) {
-	e.mut.Lock()
-	defer e.mut.Unlock()
-	e.Result = result
+// setResult потокобезопасен
+func (e *Expression) setResult(result int64) bool {
+	return e.Result.CompareAndSwap(e.Result.Load(), result)
 }
 
 type ExpressionsJsonTitle struct {
@@ -252,6 +237,12 @@ func (e *ExpressionJsonTitle) Marshal() (result []byte, err error) {
 	return
 }
 
+func CallExpressionFabric(postfix []string, Id int, status ExprStatus, tasksHandler *TasksHandler) (newInstance *Expression) {
+	newInstance = &Expression{postfix: postfix, Id: Id, tasksHandler: tasksHandler}
+	newInstance.Status.Swap(status)
+	return
+}
+
 type TaskStatus int
 
 const (
@@ -262,7 +253,7 @@ const (
 )
 
 type AgentResult struct {
-	ID     int   `json:"ID"`
+	ID     int   `json:"id"`
 	Result int64 `json:"result"`
 }
 
@@ -282,41 +273,43 @@ type InternalTask interface {
 	GetOperation() string
 	GetResult() int64
 	GetStatus() TaskStatus
-	SetStatus(newStatus TaskStatus)
-	IsReadyToCalc() bool
 	GetPermissibleDuration() time.Duration
+	IsReadyToCalc() bool
+	SetStatus(newStatus TaskStatus)
 	SetArg1(int64)
 	SetArg2(int64)
 	SetResult(result int64) bool
 }
 
 type Task struct {
-	pairID          int32
+	pairId          int32
 	arg1            interface{}
 	arg2            interface{}
 	operation       string
 	permissibleTime time.Duration
 	status          atomic.Value
 	result          atomic.Int64
-	mut             sync.Mutex
 }
 
 func (t *Task) GetPairId() int32 {
-	return t.pairID
+	return t.pairId
 }
 
 func (t *Task) GetOperation() string {
 	return t.operation
 }
 
+// GetStatus потокобезопасен.
 func (t *Task) GetStatus() TaskStatus {
 	return t.status.Load().(TaskStatus)
 }
 
+// GetResult потокобезопасен.
 func (t *Task) GetResult() int64 {
 	return t.result.Load()
 }
 
+// SetStatus потокобезопасен.
 func (t *Task) SetStatus(newStatus TaskStatus) {
 	t.status.CompareAndSwap(t.status.Load(), newStatus)
 }
@@ -343,6 +336,7 @@ func (t *Task) SetArg2(result int64) {
 	t.arg2 = result
 }
 
+// SetResult потокобезопасен.
 func (t *Task) SetResult(result int64) bool {
 	return t.result.CompareAndSwap(t.result.Load(), result)
 }
@@ -354,7 +348,7 @@ func (t *Task) GetPermissibleDuration() time.Duration {
 func CallTaskFabric(pairId int32, arg1 interface{}, arg2 interface{}, operation string,
 	status TaskStatus) (newInstance *Task) {
 	newInstance = &Task{
-		pairID:    pairId,
+		pairId:    pairId,
 		arg1:      arg1,
 		arg2:      arg2,
 		operation: operation,
@@ -366,7 +360,7 @@ func CallTaskFabric(pairId int32, arg1 interface{}, arg2 interface{}, operation 
 func CallTaskFabricWithTime(pairId int32, arg1 interface{}, arg2 interface{}, operation string, permissibleTime time.Duration,
 	status TaskStatus) (newInstance *Task) {
 	newInstance = &Task{
-		pairID:          pairId,
+		pairId:          pairId,
 		arg1:            arg1,
 		arg2:            arg2,
 		operation:       operation,

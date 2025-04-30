@@ -242,7 +242,7 @@ type ExpressionsList struct {
 func (e *ExpressionsList) AddExprFabric(postfix []string) (newExpr CommonExpression, newId int) {
 	newId = e.generateId()
 	newTaskSpace := CallTasksHandlerFabric()
-	newExpr = &Expression{postfix: postfix, ID: newId, Status: Ready, tasksHandler: newTaskSpace}
+	newExpr = CallExpressionFabric(postfix, newId, Ready, newTaskSpace)
 	newExpr.DivideIntoTasks()
 	e.mut.Lock()
 	e.exprs[newId] = newExpr.(*Expression)
@@ -293,7 +293,7 @@ func (e *ExpressionsList) GetReadyExpr() (expr CommonExpression) {
 	e.mut.Lock()
 	defer e.mut.Unlock()
 	for _, v := range e.exprs {
-		if v.Status == Ready {
+		if v.GetStatus() == Ready {
 			return v
 		}
 	}
@@ -304,16 +304,5 @@ func CallEmptyExpressionListFabric() *ExpressionsList {
 	return &ExpressionsList{
 		mut:   sync.Mutex{},
 		exprs: make(map[int]*Expression),
-	}
-}
-
-func CallExpressionListWithElementsFabric(exprs []CommonExpression) *ExpressionsList {
-	var result = make(map[int]*Expression)
-	for _, expr := range exprs {
-		result[expr.GetId()] = expr.(*Expression)
-	}
-	return &ExpressionsList{
-		mut:   sync.Mutex{},
-		exprs: result,
 	}
 }
