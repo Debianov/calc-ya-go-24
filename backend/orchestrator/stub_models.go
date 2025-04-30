@@ -1,13 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"github.com/Debianov/calc-ya-go-24/backend"
 	"time"
 )
 
 type StubExpressionsList struct {
-	buf    []StubExpression
+	buf    []ExpressionStub
 	cursor int
 }
 
@@ -16,18 +17,25 @@ func (s *StubExpressionsList) AddExprFabric(postfix []string) (newExpr backend.C
 	panic("implement me")
 }
 
-func (s *StubExpressionsList) GetAllExprs() []backend.CommonExpression {
-	//TODO implement me
-	panic("implement me")
+func (s *StubExpressionsList) GetAllExprs() (result []backend.CommonExpression) {
+	for _, expr := range s.buf {
+		result = append(result, backend.CommonExpression(&expr))
+	}
+	return
 }
 
-func (s *StubExpressionsList) Get(id int) (backend.CommonExpression, bool) {
-	//TODO implement me
-	panic("implement me")
+func (s *StubExpressionsList) Get(id int) (result backend.CommonExpression, ok bool) {
+	if id < len(s.buf) {
+		ok = true
+		result = backend.CommonExpression(&s.buf[id])
+	} else {
+		ok = false
+	}
+	return
 }
 
 func (s *StubExpressionsList) GetReadyExpr() (result backend.CommonExpression) {
-	var expr StubExpression
+	var expr ExpressionStub
 	for _, expr = range s.buf {
 		if expr.GetStatus() == backend.Ready {
 			result = &expr
@@ -41,7 +49,7 @@ func (s *StubExpressionsList) GetReadyExpr() (result backend.CommonExpression) {
 callStubExprsListFabric формирует новый StubExpressionsList, который может быть присвоен глобальной
 переменной exprsList для подмены настоящего списка в целях тестирования, или использоваться как-то ещё.
 */
-func callStubExprsListFabric(expressions ...StubExpression) (result *StubExpressionsList) {
+func callStubExprsListFabric(expressions ...ExpressionStub) (result *StubExpressionsList) {
 	if len(expressions) == 0 {
 		result = &StubExpressionsList{}
 	} else {
@@ -50,32 +58,35 @@ func callStubExprsListFabric(expressions ...StubExpression) (result *StubExpress
 	return
 }
 
-type StubExpression struct {
-	ID           int
-	Status       backend.ExprStatus
+type ExpressionStub struct {
+	Id           int                `json:"id"`
+	Status       backend.ExprStatus `json:"status"`
+	Result       int64              `json:"result"`
 	TasksHandler StubTasksHandler
 }
 
-func (s *StubExpression) Marshal() (result []byte, err error) {
+func (s *ExpressionStub) Marshal() (result []byte, err error) {
+	return json.Marshal(s)
+}
+
+func (s *ExpressionStub) MarshalId() (result []byte, err error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *StubExpression) MarshalId() (result []byte, err error) {
-	//TODO implement me
-	panic("implement me")
+func (s *ExpressionStub) GetId() int {
+	return s.Id
 }
 
-func (s *StubExpression) GetId() int {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *StubExpression) GetStatus() backend.ExprStatus {
+func (s *ExpressionStub) GetStatus() backend.ExprStatus {
 	return s.Status
 }
 
-func (s *StubExpression) GetReadyGrpcTask() (backend.GrpcTask, error) {
+func (s *ExpressionStub) GetResult() int64 {
+	panic("implement me")
+}
+
+func (s *ExpressionStub) GetReadyGrpcTask() (backend.GrpcTask, error) {
 	var (
 		newTask StubTaskWithTime
 	)
@@ -91,17 +102,17 @@ func (s *StubExpression) GetReadyGrpcTask() (backend.GrpcTask, error) {
 	return nil, errors.New("no ready tasks")
 }
 
-func (s *StubExpression) GetTasksHandler() backend.CommonTasksHandler {
+func (s *ExpressionStub) GetTasksHandler() backend.CommonTasksHandler {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *StubExpression) UpdateTask(taskID int, result int64, timeAtReceiveTask time.Time) (err error) {
+func (s *ExpressionStub) UpdateTask(taskID int, result int64, timeAtReceiveTask time.Time) (err error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *StubExpression) DivideIntoTasks() {
+func (s *ExpressionStub) DivideIntoTasks() {
 	//TODO implement me
 	panic("implement me")
 }
@@ -165,4 +176,31 @@ func (s *StubTaskWithTime) GetArg2() int64 {
 
 func (s *StubTaskWithTime) GetPermissibleDuration() string {
 	return s.Task.GetPermissibleDuration().String()
+}
+
+type ExpressionJsonStub struct {
+	ID int `json:"id"`
+}
+
+func (e ExpressionJsonStub) Marshal() (result []byte, err error) {
+	result, err = json.Marshal(&e)
+	return
+}
+
+type ExpressionsJsonTitleStub struct {
+	Expressions []ExpressionStub `json:"expressions"`
+}
+
+func (e *ExpressionsJsonTitleStub) Marshal() (result []byte, err error) {
+	result, err = json.Marshal(e)
+	return
+}
+
+type ExpressionJsonTitleStub struct {
+	Expression ExpressionStub `json:"expression"`
+}
+
+func (e *ExpressionJsonTitleStub) Marshal() (result []byte, err error) {
+	result, err = json.Marshal(e)
+	return
 }
