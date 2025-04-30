@@ -107,7 +107,7 @@ func (s *ExpressionStub) GetTasksHandler() backend.CommonTasksHandler {
 	panic("implement me")
 }
 
-func (s *ExpressionStub) UpdateTask(result backend.GrpcResult) (err error) {
+func (s *ExpressionStub) UpdateTask(result backend.GrpcResult, timeAtReceiveTask time.Time) (err error) {
 	//TODO implement me
 	panic("implement me")
 }

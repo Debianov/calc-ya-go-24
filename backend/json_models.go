@@ -61,7 +61,7 @@ type CommonExpression interface {
 	GetReadyGrpcTask() (GrpcTask, error)
 	GetResult() int64
 	GetTasksHandler() CommonTasksHandler
-	UpdateTask(taskID int, result int64, timeAtReceiveTask time.Time) (err error)
+	UpdateTask(result GrpcResult, timeAt time.Time) (err error)
 	JsonPayload
 	MarshalId() (result []byte, err error)
 	DivideIntoTasks()
@@ -130,17 +130,17 @@ func (e *Expression) GetTasksHandler() CommonTasksHandler {
 	return e.tasksHandler
 }
 
-func (e *Expression) UpdateTask(taskID int, result int64, timeAtReceiveTask time.Time) (err error) {
-	task, timeAtSendingTask, ok := e.tasksHandler.PopSentTask(taskID)
+func (e *Expression) UpdateTask(result GrpcResult, timeAtReceiveTask time.Time) (err error) {
+	task, timeAtSendingTask, ok := e.tasksHandler.PopSentTask(int(result.GetPairId()))
 	if !ok {
-		return &TaskIDNotExist{taskID}
+		return &TaskIDNotExist{int(result.GetPairId())}
 	}
 	if factTime := timeAtReceiveTask.Sub(timeAtSendingTask); factTime > task.GetPermissibleDuration() {
 		e.updateStatus(Cancelled)
 		return &TimeoutExecution{task.GetPermissibleDuration(), factTime, task.GetOperation(),
 			task.GetPairId()}
 	}
-	task.SetResult(result)
+	task.SetResult(result.GetResult())
 	e.tasksHandler.CountUpdatedTask()
 	if e.tasksHandler.Len() == 1 {
 		e.updateStatus(Completed)
@@ -253,7 +253,7 @@ const (
 )
 
 type AgentResult struct {
-	ID     int   `json:"id"`
+	Id     int   `json:"id"`
 	Result int64 `json:"result"`
 }
 
@@ -271,7 +271,7 @@ type InternalTask interface {
 	GetArg1() (int64, bool)
 	GetArg2() (int64, bool)
 	GetOperation() string
-	GetResult() int64
+	ResultHolder
 	GetStatus() TaskStatus
 	GetPermissibleDuration() time.Duration
 	IsReadyToCalc() bool

@@ -157,16 +157,13 @@ func (g *GrpcTaskServer) GetTask(_ context.Context, _ *pb.Empty) (result *pb.Tas
 }
 
 func (g *GrpcTaskServer) SendTask(_ context.Context, req *pb.TaskResult) (_ *pb.Empty, err error) {
-	var reqInJson = backend.AgentResult{
-		ID:     int(req.PairId),
-		Result: req.Result,
-	}
-	exprId, _ := pkg.Unpair(reqInJson.ID)
+	timeAtReceiveTask := time.Now()
+	exprId, _ := pkg.Unpair(int(req.PairId))
 	expr, ok := exprsList.Get(exprId)
 	if !ok {
 		return nil, status.Error(codes.NotFound, "ID выражения, соответствующей этой задаче, не найдено")
 	}
-	err = expr.UpdateTask(reqInJson.ID, reqInJson.Result, time.Now())
+	err = expr.UpdateTask(req, timeAtReceiveTask)
 	if err != nil {
 		return nil, status.Errorf(codes.Aborted, "%s", err)
 	}

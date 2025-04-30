@@ -252,9 +252,12 @@ func CallSentTasksFabric() *sentTasksHandler {
 	}
 }
 
-func CallTasksHandlerFabric() *TasksHandler {
+func CallTasksHandlerFabric() (newInstance *TasksHandler) {
 	newSentTasks := CallSentTasksFabric()
-	return &TasksHandler{sentTasks: newSentTasks}
+	newInstance = &TasksHandler{sentTasks: newSentTasks}
+	newInstance.updatedTasksCountBeforeWaitingTask.Store(0)
+	newInstance.tasksCountBeforeWaitingTask.Store(0)
+	return
 }
 
 type CommonExpressionsList interface {
