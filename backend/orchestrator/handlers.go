@@ -88,7 +88,7 @@ func expressionIdHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var err error
-	id := r.PathValue("ID")
+	id := r.PathValue("id")
 	idInINt, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		log.Panic(err)
@@ -130,7 +130,7 @@ func getHandler() (handler http.Handler) {
 	var mux = http.NewServeMux()
 	mux.HandleFunc("/api/v1/calculate", calcHandler)
 	mux.HandleFunc("/api/v1/expressions", expressionsHandler)
-	mux.HandleFunc("/api/v1/expressions/{ID}", expressionIdHandler)
+	mux.HandleFunc("/api/v1/expressions/{id}", expressionIdHandler)
 	handler = panicMiddleware(mux)
 	return
 }
