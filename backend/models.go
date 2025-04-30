@@ -8,11 +8,20 @@ import (
 	"iter"
 	"maps"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
-type CommonTask interface {
+type PairIdHolder interface {
 	GetPairId() int32
+}
+
+type ResultHolder interface {
+	GetResult() int64
+}
+
+type CommonTask interface {
+	PairIdHolder
 	GetOperation() string
 }
 
@@ -22,6 +31,11 @@ type GrpcTask interface {
 	GetArg1() int64
 	GetArg2() int64
 	GetPermissibleDuration() string
+}
+
+type GrpcResult interface {
+	PairIdHolder
+	ResultHolder
 }
 
 type TaskWithTime struct {
@@ -90,15 +104,15 @@ type CommonTasksHandler interface {
 type TasksHandler struct {
 	sentTasks                          *sentTasksHandler
 	buf                                []*Task
-	tasksCountBeforeWaitingTask        int
-	updatedTasksCountBeforeWaitingTask int
+	tasksCountBeforeWaitingTask        atomic.Value
+	updatedTasksCountBeforeWaitingTask atomic.Value
 	mut                                sync.Mutex
 }
 
 func (t *TasksHandler) Add(task InternalTask) {
 	t.mut.Lock()
+	defer t.mut.Unlock()
 	t.buf = append(t.buf, task.(*Task))
-	t.mut.Unlock()
 }
 
 func (t *TasksHandler) Get(ind int) InternalTask {
@@ -119,28 +133,36 @@ func (t *TasksHandler) Len() int {
 	return len(t.buf)
 }
 
+func (t *TasksHandler) getTasksCountBeforeWaitingTask() int {
+	return t.tasksCountBeforeWaitingTask.Load().(int)
+}
+
+func (t *TasksHandler) getUpdatedTasksCountBeforeWaitingTask() int {
+	return t.updatedTasksCountBeforeWaitingTask.Load().(int)
+}
+
 // RegisterFirst возвращает первую задачу, не удаляет её, но запоминает и не выдаёт повторно в дальнейшем.
 // Удаляет в том случае, если задача не будет использоваться для вычисления других задач.
 // Для простого получения задачи используйте Get.
 func (t *TasksHandler) RegisterFirst() (task InternalTask) {
-	task = t.Get(t.tasksCountBeforeWaitingTask)
+	task = t.Get(t.getTasksCountBeforeWaitingTask())
 	if task.IsReadyToCalc() {
-		t.tasksCountBeforeWaitingTask++
+		t.addTasksCountBeforeWaitingTask(1)
 		return
 	} else {
 		var expectedTask InternalTask
-		if t.updatedTasksCountBeforeWaitingTask == t.tasksCountBeforeWaitingTask { // цикл в
+		if t.getUpdatedTasksCountBeforeWaitingTask() == t.getTasksCountBeforeWaitingTask() { // цикл в
 			// горутине не требуется, поскольку агент будут самостоятельно тыкать в сервер, чтоб тот проверил на
 			// наличие свободных таск
-			switch t.tasksCountBeforeWaitingTask {
+			switch t.getTasksCountBeforeWaitingTask() {
 			case 1:
 				if _, ok := task.GetArg1(); ok != true {
 					expectedTask = t.Get(0)
 					t.delete(0)
 					task.SetArg1(expectedTask.GetResult())
 				}
-				t.updatedTasksCountBeforeWaitingTask = 0
-				t.tasksCountBeforeWaitingTask = 0
+				t.updatedTasksCountBeforeWaitingTask.Store(0)
+				t.tasksCountBeforeWaitingTask.Store(0)
 			case 2:
 				if _, ok := task.GetArg1(); ok != true {
 					expectedTask = t.Get(0)
@@ -152,13 +174,13 @@ func (t *TasksHandler) RegisterFirst() (task InternalTask) {
 					t.delete(0)
 					task.SetArg2(expectedTask.GetResult())
 				}
-				t.updatedTasksCountBeforeWaitingTask = 0
-				t.tasksCountBeforeWaitingTask = 0
+				t.updatedTasksCountBeforeWaitingTask.Store(0)
+				t.tasksCountBeforeWaitingTask.Store(0)
 			default:
-				if t.tasksCountBeforeWaitingTask < 3 {
+				if t.getTasksCountBeforeWaitingTask() < 3 {
 					break
 				}
-				calculatedTaskOffset := t.tasksCountBeforeWaitingTask
+				calculatedTaskOffset := t.getTasksCountBeforeWaitingTask()
 				if _, ok := task.GetArg2(); ok != true {
 					expectedTask = t.Get(calculatedTaskOffset - 1)
 					t.delete(calculatedTaskOffset - 1)
@@ -169,9 +191,9 @@ func (t *TasksHandler) RegisterFirst() (task InternalTask) {
 					t.delete(calculatedTaskOffset - 2)
 					task.SetArg1(expectedTask.GetResult())
 				}
-				t.updatedTasksCountBeforeWaitingTask = t.updatedTasksCountBeforeWaitingTask - 2
-				t.tasksCountBeforeWaitingTask = t.tasksCountBeforeWaitingTask - 2 + 1 // -2 удалённых и +1 текущий, который
-				// теперь ReadyToCalc.
+				t.updatedTasksCountBeforeWaitingTask.Store(t.getUpdatedTasksCountBeforeWaitingTask() - 2)
+				t.tasksCountBeforeWaitingTask.Store(t.getTasksCountBeforeWaitingTask() - 2 + 1) // -2 удалённых и
+				// +1 текущий, который теперь ReadyToCalc.
 			}
 			task.SetStatus(ReadyToCalc)
 		}
@@ -179,10 +201,18 @@ func (t *TasksHandler) RegisterFirst() (task InternalTask) {
 	}
 }
 
+func (t *TasksHandler) addTasksCountBeforeWaitingTask(delta int) {
+	t.tasksCountBeforeWaitingTask.Store(t.getTasksCountBeforeWaitingTask() + delta)
+}
+
+func (t *TasksHandler) addUpdatedTasksCountBeforeWaitingTasks(delta int) {
+	t.updatedTasksCountBeforeWaitingTask.Store(t.getUpdatedTasksCountBeforeWaitingTask() + delta)
+}
+
 // CountUpdatedTask обновляет число отправленных тасок. Обязателен к вызову, если любой Task, указатель которого
 // хранится в экземпляре этой структуры, был обновлён.
 func (t *TasksHandler) CountUpdatedTask() {
-	t.updatedTasksCountBeforeWaitingTask++
+	t.addUpdatedTasksCountBeforeWaitingTasks(1)
 }
 
 func (t *TasksHandler) PopSentTask(taskId int) (InternalTask, time.Time, bool) {
