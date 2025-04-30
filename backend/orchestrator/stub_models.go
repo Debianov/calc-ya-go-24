@@ -7,24 +7,24 @@ import (
 	"time"
 )
 
-type StubExpressionsList struct {
+type ExpressionsListStub struct {
 	buf    []ExpressionStub
 	cursor int
 }
 
-func (s *StubExpressionsList) AddExprFabric(postfix []string) (newExpr backend.CommonExpression, newId int) {
+func (s *ExpressionsListStub) AddExprFabric(postfix []string) (newExpr backend.CommonExpression, newId int) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *StubExpressionsList) GetAllExprs() (result []backend.CommonExpression) {
+func (s *ExpressionsListStub) GetAllExprs() (result []backend.CommonExpression) {
 	for _, expr := range s.buf {
 		result = append(result, backend.CommonExpression(&expr))
 	}
 	return
 }
 
-func (s *StubExpressionsList) Get(id int) (result backend.CommonExpression, ok bool) {
+func (s *ExpressionsListStub) Get(id int) (result backend.CommonExpression, ok bool) {
 	if id < len(s.buf) {
 		ok = true
 		result = backend.CommonExpression(&s.buf[id])
@@ -34,7 +34,7 @@ func (s *StubExpressionsList) Get(id int) (result backend.CommonExpression, ok b
 	return
 }
 
-func (s *StubExpressionsList) GetReadyExpr() (result backend.CommonExpression) {
+func (s *ExpressionsListStub) GetReadyExpr() (result backend.CommonExpression) {
 	var expr ExpressionStub
 	for _, expr = range s.buf {
 		if expr.GetStatus() == backend.Ready {
@@ -46,14 +46,14 @@ func (s *StubExpressionsList) GetReadyExpr() (result backend.CommonExpression) {
 }
 
 /*
-callStubExprsListFabric формирует новый StubExpressionsList, который может быть присвоен глобальной
+callExprsListStubFabric формирует новый ExpressionsListStub, который может быть присвоен глобальной
 переменной exprsList для подмены настоящего списка в целях тестирования, или использоваться как-то ещё.
 */
-func callStubExprsListFabric(expressions ...ExpressionStub) (result *StubExpressionsList) {
+func callExprsListStubFabric(expressions ...ExpressionStub) (result *ExpressionsListStub) {
 	if len(expressions) == 0 {
-		result = &StubExpressionsList{}
+		result = &ExpressionsListStub{}
 	} else {
-		result = &StubExpressionsList{buf: expressions}
+		result = &ExpressionsListStub{buf: expressions}
 	}
 	return
 }
@@ -62,7 +62,7 @@ type ExpressionStub struct {
 	Id           int                `json:"id"`
 	Status       backend.ExprStatus `json:"status"`
 	Result       int64              `json:"result"`
-	TasksHandler StubTasksHandler
+	TasksHandler TasksHandlerStub
 }
 
 func (s *ExpressionStub) Marshal() (result []byte, err error) {
@@ -88,11 +88,11 @@ func (s *ExpressionStub) GetResult() int64 {
 
 func (s *ExpressionStub) GetReadyGrpcTask() (backend.GrpcTask, error) {
 	var (
-		newTask StubTaskWithTime
+		newTask TaskWithTimeStub
 	)
 	for _, task := range s.TasksHandler.Buf {
 		if task.IsReadyToCalc() {
-			newTask = StubTaskWithTime{
+			newTask = TaskWithTimeStub{
 				Task:      task.(*backend.Task),
 				DummyTime: time.Now(),
 			}
@@ -107,7 +107,7 @@ func (s *ExpressionStub) GetTasksHandler() backend.CommonTasksHandler {
 	panic("implement me")
 }
 
-func (s *ExpressionStub) UpdateTask(taskID int, result int64, timeAtReceiveTask time.Time) (err error) {
+func (s *ExpressionStub) UpdateTask(result backend.GrpcResult) (err error) {
 	//TODO implement me
 	panic("implement me")
 }
@@ -117,64 +117,64 @@ func (s *ExpressionStub) DivideIntoTasks() {
 	panic("implement me")
 }
 
-type StubTasksHandler struct {
+type TasksHandlerStub struct {
 	Buf map[int]backend.InternalTask
 }
 
-func (s *StubTasksHandler) Add(task backend.InternalTask) {
+func (s *TasksHandlerStub) Add(task backend.InternalTask) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *StubTasksHandler) Get(ind int) backend.InternalTask {
+func (s *TasksHandlerStub) Get(ind int) backend.InternalTask {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *StubTasksHandler) Len() int {
+func (s *TasksHandlerStub) Len() int {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *StubTasksHandler) RegisterFirst() (task backend.InternalTask) {
+func (s *TasksHandlerStub) RegisterFirst() (task backend.InternalTask) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *StubTasksHandler) CountUpdatedTask() {
+func (s *TasksHandlerStub) CountUpdatedTask() {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *StubTasksHandler) PopSentTask(taskId int) (backend.InternalTask, time.Time, bool) {
+func (s *TasksHandlerStub) PopSentTask(taskId int) (backend.InternalTask, time.Time, bool) {
 	//TODO implement me
 	panic("implement me")
 }
 
-type StubTaskWithTime struct {
+type TaskWithTimeStub struct {
 	Task      *backend.Task
 	DummyTime time.Time
 }
 
-func (s *StubTaskWithTime) GetPairId() int32 {
+func (s *TaskWithTimeStub) GetPairId() int32 {
 	return s.Task.GetPairId()
 }
 
-func (s *StubTaskWithTime) GetOperation() string {
+func (s *TaskWithTimeStub) GetOperation() string {
 	return s.Task.GetOperation()
 }
 
-func (s *StubTaskWithTime) GetArg1() int64 {
+func (s *TaskWithTimeStub) GetArg1() int64 {
 	v, _ := s.Task.GetArg1()
 	return v
 }
 
-func (s *StubTaskWithTime) GetArg2() int64 {
+func (s *TaskWithTimeStub) GetArg2() int64 {
 	v, _ := s.Task.GetArg2()
 	return v
 }
 
-func (s *StubTaskWithTime) GetPermissibleDuration() string {
+func (s *TaskWithTimeStub) GetPermissibleDuration() string {
 	return s.Task.GetPermissibleDuration().String()
 }
 

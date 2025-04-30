@@ -178,7 +178,7 @@ func testExpressionsHandler200(t *testing.T) {
 			{Id: 1, Status: backend.Completed, Result: 432}, {Id: 2, Status: backend.Cancelled, Result: 0},
 			{Id: 3, Status: backend.NoReadyTasks, Result: 0}, {Id: 4, Status: backend.Completed, Result: -2345}}
 	)
-	exprsList = callStubExprsListFabric(expectedExpressions...)
+	exprsList = callExprsListStubFabric(expectedExpressions...)
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*ExpressionsJsonTitleStub{{expectedExpressions}}
@@ -196,7 +196,7 @@ func testExpressionsHandlerPost(t *testing.T) {
 	var (
 		expectedExpressions = []ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
 	)
-	exprsList = callStubExprsListFabric(expectedExpressions...)
+	exprsList = callExprsListStubFabric(expectedExpressions...)
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.EmptyJson{{}}
@@ -234,7 +234,7 @@ func testExpressionIdHandler200(t *testing.T) {
 		expectedExpressions = []ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0},
 			{Id: 1, Status: backend.Completed, Result: 431}}
 	)
-	exprsList = callStubExprsListFabric(expectedExpressions...)
+	exprsList = callExprsListStubFabric(expectedExpressions...)
 	for ind, expExpr := range expectedExpressions {
 		t.Run(fmt.Sprintf("ExpressionId%d", ind), func(t *testing.T) {
 			var (
@@ -257,7 +257,7 @@ func testExpressionIdHandler404(t *testing.T) {
 	var (
 		expectedExpressions = []ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
 	)
-	exprsList = callStubExprsListFabric(expectedExpressions...)
+	exprsList = callExprsListStubFabric(expectedExpressions...)
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.EmptyJson{{}}
@@ -276,7 +276,7 @@ func testExpressionIdHandlerPost(t *testing.T) {
 	var (
 		expectedExpressions = []ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
 	)
-	exprsList = callStubExprsListFabric(expectedExpressions...)
+	exprsList = callExprsListStubFabric(expectedExpressions...)
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.EmptyJson{{}}
@@ -366,7 +366,7 @@ func testGetTaskNotFoundCode(t *testing.T) {
 	t.Cleanup(func() {
 		exprsList = backend.CallEmptyExpressionListFabric()
 	})
-	exprsList = callStubExprsListFabric()
+	exprsList = callExprsListStubFabric()
 	result, err = g.GetTask(context.TODO(), &pb.Empty{})
 	assert.Equal(t, codes.NotFound, status.Code(err))
 	nilToTaskToSend := (*pb.TaskToSend)(nil) // возвращается не просто nil
@@ -382,10 +382,10 @@ func testGetTaskInternalCode(t *testing.T) {
 	t.Cleanup(func() {
 		exprsList = backend.CallEmptyExpressionListFabric()
 	})
-	exprsList = callStubExprsListFabric(ExpressionStub{
+	exprsList = callExprsListStubFabric(ExpressionStub{
 		Id:           0,
 		Status:       backend.Ready,
-		TasksHandler: StubTasksHandler{},
+		TasksHandler: TasksHandlerStub{},
 	})
 	result, err = g.GetTask(context.TODO(), &pb.Empty{})
 	assert.Equal(t, codes.Internal, status.Code(err))
@@ -405,10 +405,10 @@ func testGetTaskOkCode(t *testing.T) {
 	var (
 		expectedTask = backend.CallTaskFabric(0, int64(2), int64(4), "+", backend.ReadyToCalc)
 	)
-	exprsList = callStubExprsListFabric(ExpressionStub{
+	exprsList = callExprsListStubFabric(ExpressionStub{
 		Id:           0,
 		Status:       backend.Ready,
-		TasksHandler: StubTasksHandler{Buf: map[int]backend.InternalTask{0: expectedTask}}})
+		TasksHandler: TasksHandlerStub{Buf: map[int]backend.InternalTask{0: expectedTask}}})
 	result, err = g.GetTask(context.TODO(), &pb.Empty{})
 	assert.Equal(t, codes.OK, status.Code(err))
 	arg1, _ := expectedTask.GetArg1()
