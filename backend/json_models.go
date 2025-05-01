@@ -131,7 +131,7 @@ func (e *Expression) GetTasksHandler() CommonTasksHandler {
 }
 
 func (e *Expression) UpdateTask(result GrpcResult, timeAtReceiveTask time.Time) (err error) {
-	task, timeAtSendingTask, ok := e.tasksHandler.PopSentTask(int(result.GetPairId()))
+	task, timeAtSendingTask, ok := e.tasksHandler.PopSentTask(result.GetPairId())
 	if !ok {
 		return &TaskIDNotExist{int(result.GetPairId())}
 	}

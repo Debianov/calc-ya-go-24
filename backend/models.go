@@ -93,7 +93,7 @@ type CommonTasksHandler interface {
 	Len() int
 	RegisterFirst() (task InternalTask)
 	CountUpdatedTask()
-	PopSentTask(taskId int) (InternalTask, time.Time, bool)
+	PopSentTask(taskId int32) (InternalTask, time.Time, bool)
 }
 
 // TasksHandler - обёртка над pkg.Stack с дополнительными методами. Нужен для обработки случаев, когда несколько Task-ов готовы
@@ -215,13 +215,13 @@ func (t *TasksHandler) CountUpdatedTask() {
 	t.addUpdatedTasksCountBeforeWaitingTasks(1)
 }
 
-func (t *TasksHandler) PopSentTask(taskId int) (InternalTask, time.Time, bool) {
+func (t *TasksHandler) PopSentTask(taskId int32) (InternalTask, time.Time, bool) {
 	return t.sentTasks.PopSentTask(taskId)
 }
 
 // sentTasksHandler — map для работы с TaskWithTime структурой.
 type sentTasksHandler struct {
-	buf map[int]TaskWithTime
+	buf map[int32]TaskWithTime
 	mut sync.Mutex
 }
 
@@ -231,12 +231,12 @@ func (t *sentTasksHandler) WrapWithTime(readyTask InternalTask, timeAtSendingTas
 		timeAtSendingTask: timeAtSendingTask,
 	}
 	t.mut.Lock()
-	t.buf[int(readyTask.GetPairId())] = result
+	t.buf[readyTask.GetPairId()] = result
 	t.mut.Unlock()
 	return
 }
 
-func (t *sentTasksHandler) PopSentTask(taskId int) (*Task, time.Time, bool) {
+func (t *sentTasksHandler) PopSentTask(taskId int32) (*Task, time.Time, bool) {
 	t.mut.Lock()
 	taskWithTime, ok := t.buf[taskId]
 	if ok {
@@ -248,7 +248,7 @@ func (t *sentTasksHandler) PopSentTask(taskId int) (*Task, time.Time, bool) {
 
 func CallSentTasksFabric() *sentTasksHandler {
 	return &sentTasksHandler{
-		buf: make(map[int]TaskWithTime),
+		buf: make(map[int32]TaskWithTime),
 	}
 }
 
