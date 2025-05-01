@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"errors"
 	"os"
 )
 
@@ -30,4 +31,18 @@ func CallEnvVarFabric(key string, defaultValue string) *EnvVar {
 		key:          key,
 		defaultValue: defaultValue,
 	}
+}
+
+func convertToInt64Interface(arg interface{}) (result interface{}, err error) {
+	switch v := arg.(type) {
+	case int:
+		result = int64(v)
+	case int32:
+		result = int64(v)
+	case int64, nil:
+		result = v
+	default:
+		err = errors.New("arg должен быть числом")
+	}
+	return
 }

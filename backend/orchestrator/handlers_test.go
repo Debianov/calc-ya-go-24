@@ -100,11 +100,11 @@ func testCalcHandler201(t *testing.T) {
 
 	var (
 		expectedLen               = len(expectedResponses)
-		expectedTasksForFirstExpr = []backend.Task{*backend.CallTaskFabric(0, int64(2), int64(4), "*",
-			backend.ReadyToCalc), *backend.CallTaskFabric(1, nil, int64(2), "+",
+		expectedTasksForFirstExpr = []backend.Task{*backend.CallTaskFabric(0, 2, 4, "*",
+			backend.ReadyToCalc), *backend.CallTaskFabric(1, nil, 2, "+",
 			backend.WaitingOtherTasks)}
-		expectedTasksForSecondExpr = []backend.Task{*backend.CallTaskFabric(2, int64(4), int64(2), "*",
-			backend.ReadyToCalc), *backend.CallTaskFabric(3, int64(3), int64(5), "*",
+		expectedTasksForSecondExpr = []backend.Task{*backend.CallTaskFabric(2, 4, 2, "*",
+			backend.ReadyToCalc), *backend.CallTaskFabric(3, 3, 5, "*",
 			backend.ReadyToCalc), *backend.CallTaskFabric(5, nil, nil, "+",
 			backend.WaitingOtherTasks)}
 		expectedTasks = [][]backend.Task{expectedTasksForFirstExpr, expectedTasksForSecondExpr}
@@ -403,7 +403,7 @@ func testGetTaskOkCode(t *testing.T) {
 		exprsList = backend.CallEmptyExpressionListFabric()
 	})
 	var (
-		expectedTask = backend.CallTaskFabric(0, int64(2), int64(4), "+", backend.ReadyToCalc)
+		expectedTask = backend.CallTaskFabric(0, 2, 4, "+", backend.ReadyToCalc)
 	)
 	exprsList = callExprsListStubFabric(ExpressionStub{
 		Id:           0,
@@ -485,7 +485,7 @@ func testSendTaskOkCode(t *testing.T) {
 		}
 		err          error
 		tasksHandler = &TasksHandlerStub{Buf: map[int32]backend.InternalTask{expectedPairId: backend.CallTaskFabric(
-			expectedPairId, int64(2), int64(3), "-", backend.ReadyToCalc)}}
+			expectedPairId, 2, 3, "-", backend.ReadyToCalc)}}
 	)
 	exprsList = callExprsListStubFabric(ExpressionStub{
 		Id:           0,

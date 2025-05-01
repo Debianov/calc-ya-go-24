@@ -345,24 +345,56 @@ func (t *Task) GetPermissibleDuration() time.Duration {
 	return t.permissibleTime
 }
 
+/*
+CallTaskFabric arg1 и arg2 должны быть либо nil, либо int(8/32/64)
+*/
 func CallTaskFabric(pairId int32, arg1 interface{}, arg2 interface{}, operation string,
 	status TaskStatus) (newInstance *Task) {
+	var (
+		finalArg1 interface{}
+		finalArg2 interface{}
+		err       error
+	)
+	finalArg1, err = convertToInt64Interface(arg1)
+	if err != nil {
+		panic(err)
+	}
+	finalArg2, err = convertToInt64Interface(arg2)
+	if err != nil {
+		panic(err)
+	}
 	newInstance = &Task{
 		pairId:    pairId,
-		arg1:      arg1,
-		arg2:      arg2,
+		arg1:      finalArg1,
+		arg2:      finalArg2,
 		operation: operation,
 	}
 	newInstance.SetStatus(status)
 	return newInstance
 }
 
-func CallTaskWithTimeFabric(pairId int32, arg1 interface{}, arg2 interface{}, operation string, permissibleTime time.Duration,
-	status TaskStatus) (newInstance *Task) {
+/*
+CallTaskWithTimeFabric arg1 и arg2 должны быть либо nil, либо int(8/32/64)
+*/
+func CallTaskWithTimeFabric(pairId int32, arg1 interface{}, arg2 interface{}, operation string,
+	permissibleTime time.Duration, status TaskStatus) (newInstance *Task) {
+	var (
+		finalArg1 interface{}
+		finalArg2 interface{}
+		err       error
+	)
+	finalArg1, err = convertToInt64Interface(arg1)
+	if err != nil {
+		panic(err)
+	}
+	finalArg2, err = convertToInt64Interface(arg2)
+	if err != nil {
+		panic(err)
+	}
 	newInstance = &Task{
 		pairId:          pairId,
-		arg1:            arg1,
-		arg2:            arg2,
+		arg1:            finalArg1,
+		arg2:            finalArg2,
 		operation:       operation,
 		permissibleTime: permissibleTime,
 	}
