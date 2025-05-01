@@ -170,12 +170,12 @@ func (e *Expression) DivideIntoTasks() {
 			if stack.Len() >= 2 {
 				arg2 := stack.Pop()
 				arg1 := stack.Pop()
-				newTask = CallTaskFabricWithTime(newId, arg1, arg2, r, e.getPermissibleTime(r), ReadyToCalc)
+				newTask = CallTaskWithTimeFabric(newId, arg1, arg2, r, e.getPermissibleTime(r), ReadyToCalc)
 			} else if stack.Len() == 1 {
-				newTask = CallTaskFabricWithTime(newId, nil, stack.Pop(), r, e.getPermissibleTime(r),
+				newTask = CallTaskWithTimeFabric(newId, nil, stack.Pop(), r, e.getPermissibleTime(r),
 					WaitingOtherTasks)
 			} else {
-				newTask = CallTaskFabricWithTime(newId, nil, nil, r, e.getPermissibleTime(r), WaitingOtherTasks)
+				newTask = CallTaskWithTimeFabric(newId, nil, nil, r, e.getPermissibleTime(r), WaitingOtherTasks)
 			}
 			e.tasksHandler.Add(newTask)
 			operatorCount++
@@ -357,7 +357,7 @@ func CallTaskFabric(pairId int32, arg1 interface{}, arg2 interface{}, operation 
 	return newInstance
 }
 
-func CallTaskFabricWithTime(pairId int32, arg1 interface{}, arg2 interface{}, operation string, permissibleTime time.Duration,
+func CallTaskWithTimeFabric(pairId int32, arg1 interface{}, arg2 interface{}, operation string, permissibleTime time.Duration,
 	status TaskStatus) (newInstance *Task) {
 	newInstance = &Task{
 		pairId:          pairId,

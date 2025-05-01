@@ -385,7 +385,7 @@ func testGetTaskInternalCode(t *testing.T) {
 	exprsList = callExprsListStubFabric(ExpressionStub{
 		Id:           0,
 		Status:       backend.Ready,
-		TasksHandler: TasksHandlerStub{},
+		TasksHandler: &TasksHandlerStub{},
 	})
 	result, err = g.GetTask(context.TODO(), &pb.Empty{})
 	assert.Equal(t, codes.Internal, status.Code(err))
@@ -408,13 +408,13 @@ func testGetTaskOkCode(t *testing.T) {
 	exprsList = callExprsListStubFabric(ExpressionStub{
 		Id:           0,
 		Status:       backend.Ready,
-		TasksHandler: TasksHandlerStub{Buf: map[int]backend.InternalTask{0: expectedTask}}})
+		TasksHandler: &TasksHandlerStub{Buf: map[int32]backend.InternalTask{0: expectedTask}}})
 	result, err = g.GetTask(context.TODO(), &pb.Empty{})
 	assert.Equal(t, codes.OK, status.Code(err))
 	arg1, _ := expectedTask.GetArg1()
 	arg2, _ := expectedTask.GetArg2()
 	var (
-		wrappedTask = &pb.TaskToSend{
+		wrappedExpectedTask = &pb.TaskToSend{
 			PairId:              expectedTask.GetPairId(),
 			Arg1:                arg1,
 			Arg2:                arg2,
@@ -422,11 +422,85 @@ func testGetTaskOkCode(t *testing.T) {
 			PermissibleDuration: expectedTask.GetPermissibleDuration().String(),
 		}
 	)
-	assert.EqualExportedValues(t, wrappedTask, result)
+	assert.EqualExportedValues(t, wrappedExpectedTask, result)
 }
 
 func TestGetTask(t *testing.T) {
 	t.Run("NotFoundCode", testGetTaskNotFoundCode)
-	t.Run("Internal", testGetTaskInternalCode)
+	t.Run("InternalCode", testGetTaskInternalCode)
 	t.Run("OkCode", testGetTaskOkCode)
+}
+
+func testSendTaskNotFoundCode(t *testing.T) {
+	t.Cleanup(func() {
+		exprsList = backend.CallEmptyExpressionListFabric()
+	})
+	var (
+		g      = GetDefaultGrpcServer()
+		toSend = &pb.TaskResult{
+			PairId: 12,
+			Result: 0,
+		}
+		err error
+	)
+	exprsList = callExprsListStubFabric()
+	_, err = g.SendTask(context.TODO(), toSend)
+	assert.Equal(t, codes.NotFound, status.Code(err))
+}
+
+func testSendTaskAbortedCode(t *testing.T) {
+	t.Cleanup(func() {
+		exprsList = backend.CallEmptyExpressionListFabric()
+	})
+	var (
+		g      = GetDefaultGrpcServer()
+		toSend = &pb.TaskResult{
+			PairId: 0,
+			Result: 2,
+		}
+		err          error
+		tasksHandler = &TasksHandlerStub{Buf: make(map[int32]backend.InternalTask)}
+	)
+	exprsList = callExprsListStubFabric(ExpressionStub{
+		Id:           0, // pairId 15 = expr id 3 and internal task Id (unused) 3
+		Status:       backend.Ready,
+		Result:       0,
+		TasksHandler: tasksHandler,
+	})
+	_, err = g.SendTask(context.TODO(), toSend)
+	assert.Equal(t, codes.Aborted, status.Code(err))
+}
+
+func testSendTaskOkCode(t *testing.T) {
+	t.Cleanup(func() {
+		exprsList = backend.CallEmptyExpressionListFabric()
+	})
+	var (
+		g              = GetDefaultGrpcServer()
+		expectedResult = int64(15)
+		expectedPairId = int32(0)
+		toSend         = &pb.TaskResult{
+			PairId: expectedPairId,
+			Result: expectedResult,
+		}
+		err          error
+		tasksHandler = &TasksHandlerStub{Buf: map[int32]backend.InternalTask{expectedPairId: backend.CallTaskFabric(
+			expectedPairId, int64(2), int64(3), "-", backend.ReadyToCalc)}}
+	)
+	exprsList = callExprsListStubFabric(ExpressionStub{
+		Id:           0,
+		Status:       backend.Ready,
+		Result:       0,
+		TasksHandler: tasksHandler,
+	})
+	_, err = g.SendTask(context.TODO(), toSend)
+	assert.Equal(t, codes.OK, status.Code(err))
+	taskToCheck := tasksHandler.Get(int(expectedPairId))
+	assert.Equal(t, expectedResult, taskToCheck.GetResult())
+}
+
+func TestSendTask(t *testing.T) {
+	t.Run("NotFoundCode", testSendTaskNotFoundCode)
+	t.Run("AbortedCode", testSendTaskAbortedCode)
+	t.Run("OkCode", testSendTaskOkCode)
 }

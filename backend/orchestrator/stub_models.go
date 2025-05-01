@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/Debianov/calc-ya-go-24/backend"
 	"time"
 )
@@ -24,6 +25,7 @@ func (s *ExpressionsListStub) GetAllExprs() (result []backend.CommonExpression) 
 	return
 }
 
+// Get получает ExpressionStub из buf по порядковому id Expression в этом buf.
 func (s *ExpressionsListStub) Get(id int) (result backend.CommonExpression, ok bool) {
 	if id < len(s.buf) {
 		ok = true
@@ -62,7 +64,7 @@ type ExpressionStub struct {
 	Id           int                `json:"id"`
 	Status       backend.ExprStatus `json:"status"`
 	Result       int64              `json:"result"`
-	TasksHandler TasksHandlerStub
+	TasksHandler *TasksHandlerStub
 }
 
 func (s *ExpressionStub) Marshal() (result []byte, err error) {
@@ -107,9 +109,13 @@ func (s *ExpressionStub) GetTasksHandler() backend.CommonTasksHandler {
 	panic("implement me")
 }
 
-func (s *ExpressionStub) UpdateTask(result backend.GrpcResult, timeAtReceiveTask time.Time) (err error) {
-	//TODO implement me
-	panic("implement me")
+func (s *ExpressionStub) UpdateTask(result backend.GrpcResult, _ time.Time) (err error) {
+	taskToChange, ok := s.TasksHandler.Buf[result.GetPairId()]
+	if !ok {
+		return fmt.Errorf("задачи %d не найдено", result.GetPairId())
+	}
+	taskToChange.SetResult(result.GetResult())
+	return
 }
 
 func (s *ExpressionStub) DivideIntoTasks() {
@@ -118,7 +124,7 @@ func (s *ExpressionStub) DivideIntoTasks() {
 }
 
 type TasksHandlerStub struct {
-	Buf map[int]backend.InternalTask
+	Buf map[int32]backend.InternalTask
 }
 
 func (s *TasksHandlerStub) Add(task backend.InternalTask) {
@@ -127,8 +133,7 @@ func (s *TasksHandlerStub) Add(task backend.InternalTask) {
 }
 
 func (s *TasksHandlerStub) Get(ind int) backend.InternalTask {
-	//TODO implement me
-	panic("implement me")
+	return s.Buf[int32(ind)]
 }
 
 func (s *TasksHandlerStub) Len() int {
