@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/Debianov/calc-ya-go-24/pkg"
-	"go/types"
 	"log"
 	"strconv"
 	"sync/atomic"
@@ -23,21 +22,6 @@ type RequestJson struct {
 func (r RequestJson) Marshal() (result []byte, err error) {
 	result, err = json.Marshal(&r)
 	return
-}
-
-/*
-RequestNilJson изначально нужен для передачи nil и вызова Internal Server Error. Мы передаём nil, затем
-он извлекается через Expression для создания io.Reader, а этот io.Reader запихивается в http.Request и передаётся
-дальше в функцию. Далее, функция вызовет панику, паника перехватится PanicMiddleware, и далее по списку.
-
-Используется в тесте TestBadGetHandler.
-*/
-type RequestNilJson struct {
-	Expression types.Type `json:"expression"`
-}
-
-func (r RequestNilJson) Marshal() (result []byte, err error) {
-	return nil, nil
 }
 
 type EmptyJson struct {
