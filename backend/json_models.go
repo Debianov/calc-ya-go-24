@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+// JsonPayload реализует тот же интерфейс, что и json.Marshaler, только метод с другим названием
 type JsonPayload interface {
 	Marshal() (result []byte, err error)
 }
@@ -26,7 +27,7 @@ func (r RequestJson) Marshal() (result []byte, err error) {
 
 /*
 RequestNilJson изначально нужен для передачи nil и вызова Internal Server Error. Мы передаём nil, затем
-он извлекается через Expression для создания Reader, а этот Reader запихивается в http.Request и передаётся
+он извлекается через Expression для создания io.Reader, а этот io.Reader запихивается в http.Request и передаётся
 дальше в функцию. Далее, функция вызовет панику, паника перехватится PanicMiddleware, и далее по списку.
 
 Используется в тесте TestBadGetHandler.

@@ -91,8 +91,8 @@ func testCalcHandler201(t *testing.T) {
 	})
 	var (
 		requestsToTest    = []backend.RequestJson{{"2+2*4"}, {"4*2+3*5"}}
-		expectedResponses = []*ExpressionJsonStub{{ID: 0}, {ID: 1}}
-		commonHttpCase    = backend.HttpCases[backend.RequestJson, *ExpressionJsonStub]{RequestsToSend: requestsToTest,
+		expectedResponses = []*backend.ExpressionJsonStub{{ID: 0}, {ID: 1}}
+		commonHttpCase    = backend.HttpCases[backend.RequestJson, *backend.ExpressionJsonStub]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/calculate",
 			ExpectedHttpCode: http.StatusCreated}
 	)
@@ -174,15 +174,15 @@ func testExpressionsHandler200(t *testing.T) {
 		exprsList = backend.CallEmptyExpressionListFabric()
 	})
 	var (
-		expectedExpressions = []ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0},
+		expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0},
 			{Id: 1, Status: backend.Completed, Result: 432}, {Id: 2, Status: backend.Cancelled, Result: 0},
 			{Id: 3, Status: backend.NoReadyTasks, Result: 0}, {Id: 4, Status: backend.Completed, Result: -2345}}
 	)
 	exprsList = callExprsListStubFabric(expectedExpressions...)
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*ExpressionsJsonTitleStub{{expectedExpressions}}
-		commonHttpCase    = backend.HttpCases[backend.EmptyJson, *ExpressionsJsonTitleStub]{RequestsToSend: requestsToTest,
+		expectedResponses = []*backend.ExpressionsJsonTitleStub{{expectedExpressions}}
+		commonHttpCase    = backend.HttpCases[backend.EmptyJson, *backend.ExpressionsJsonTitleStub]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/expressions",
 			ExpectedHttpCode: http.StatusOK}
 	)
@@ -194,7 +194,7 @@ func testExpressionsHandlerPost(t *testing.T) {
 		exprsList = backend.CallEmptyExpressionListFabric()
 	})
 	var (
-		expectedExpressions = []ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
+		expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
 	)
 	exprsList = callExprsListStubFabric(expectedExpressions...)
 	var (
@@ -231,7 +231,7 @@ func testExpressionIdHandler200(t *testing.T) {
 		exprsList = backend.CallEmptyExpressionListFabric()
 	})
 	var (
-		expectedExpressions = []ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0},
+		expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0},
 			{Id: 1, Status: backend.Completed, Result: 431}}
 	)
 	exprsList = callExprsListStubFabric(expectedExpressions...)
@@ -239,8 +239,8 @@ func testExpressionIdHandler200(t *testing.T) {
 		t.Run(fmt.Sprintf("ExpressionId%d", ind), func(t *testing.T) {
 			var (
 				requestsToTest    = []backend.EmptyJson{{}}
-				expectedResponses = []*ExpressionJsonTitleStub{{expExpr}}
-				serverMuxHttpCase = backend.ServerMuxHttpCases[backend.EmptyJson, *ExpressionJsonTitleStub]{
+				expectedResponses = []*backend.ExpressionJsonTitleStub{{expExpr}}
+				serverMuxHttpCase = backend.ServerMuxHttpCases[backend.EmptyJson, *backend.ExpressionJsonTitleStub]{
 					RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
 					UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: fmt.Sprintf("/api/v1/expressions/%d", ind),
 					ExpectedHttpCode: http.StatusOK}
@@ -255,7 +255,7 @@ func testExpressionIdHandler404(t *testing.T) {
 		exprsList = backend.CallEmptyExpressionListFabric()
 	})
 	var (
-		expectedExpressions = []ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
+		expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
 	)
 	exprsList = callExprsListStubFabric(expectedExpressions...)
 	var (
@@ -274,7 +274,7 @@ func testExpressionIdHandlerPost(t *testing.T) {
 		exprsList = backend.CallEmptyExpressionListFabric()
 	})
 	var (
-		expectedExpressions = []ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
+		expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
 	)
 	exprsList = callExprsListStubFabric(expectedExpressions...)
 	var (
@@ -382,10 +382,10 @@ func testGetTaskInternalCode(t *testing.T) {
 	t.Cleanup(func() {
 		exprsList = backend.CallEmptyExpressionListFabric()
 	})
-	exprsList = callExprsListStubFabric(ExpressionStub{
+	exprsList = callExprsListStubFabric(backend.ExpressionStub{
 		Id:           0,
 		Status:       backend.Ready,
-		TasksHandler: &TasksHandlerStub{},
+		TasksHandler: &backend.TasksHandlerStub{},
 	})
 	result, err = g.GetTask(context.TODO(), &pb.Empty{})
 	assert.Equal(t, codes.Internal, status.Code(err))
@@ -405,10 +405,10 @@ func testGetTaskOkCode(t *testing.T) {
 	var (
 		expectedTask = backend.CallTaskFabric(0, 2, 4, "+", backend.ReadyToCalc)
 	)
-	exprsList = callExprsListStubFabric(ExpressionStub{
+	exprsList = callExprsListStubFabric(backend.ExpressionStub{
 		Id:           0,
 		Status:       backend.Ready,
-		TasksHandler: &TasksHandlerStub{Buf: map[int32]backend.InternalTask{0: expectedTask}}})
+		TasksHandler: &backend.TasksHandlerStub{Buf: map[int32]backend.InternalTask{0: expectedTask}}})
 	result, err = g.GetTask(context.TODO(), &pb.Empty{})
 	assert.Equal(t, codes.OK, status.Code(err))
 	arg1, _ := expectedTask.GetArg1()
@@ -459,9 +459,9 @@ func testSendTaskAbortedCode(t *testing.T) {
 			Result: 2,
 		}
 		err          error
-		tasksHandler = &TasksHandlerStub{Buf: make(map[int32]backend.InternalTask)}
+		tasksHandler = &backend.TasksHandlerStub{Buf: make(map[int32]backend.InternalTask)}
 	)
-	exprsList = callExprsListStubFabric(ExpressionStub{
+	exprsList = callExprsListStubFabric(backend.ExpressionStub{
 		Id:           0, // pairId 15 = expr id 3 and internal task Id (unused) 3
 		Status:       backend.Ready,
 		Result:       0,
@@ -484,10 +484,10 @@ func testSendTaskOkCode(t *testing.T) {
 			Result: expectedResult,
 		}
 		err          error
-		tasksHandler = &TasksHandlerStub{Buf: map[int32]backend.InternalTask{expectedPairId: backend.CallTaskFabric(
+		tasksHandler = &backend.TasksHandlerStub{Buf: map[int32]backend.InternalTask{expectedPairId: backend.CallTaskFabric(
 			expectedPairId, 2, 3, "-", backend.ReadyToCalc)}}
 	)
-	exprsList = callExprsListStubFabric(ExpressionStub{
+	exprsList = callExprsListStubFabric(backend.ExpressionStub{
 		Id:           0,
 		Status:       backend.Ready,
 		Result:       0,
