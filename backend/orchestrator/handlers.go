@@ -16,7 +16,97 @@ import (
 	"time"
 )
 
-var exprsList backend.CommonExpressionsList = backend.CallEmptyExpressionListFabric()
+var (
+	db                                      = backend.CallDbFabric()
+	exprsList backend.CommonExpressionsList = backend.CallEmptyExpressionListFabric()
+)
+
+func registerHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		return
+	}
+	if r.Header.Get("Content-Type") != "application/json" {
+		return
+	}
+	var (
+		reqBuf   []byte
+		jsonUser = backend.CallJsonUserFabric()
+		dbUser   *backend.DbUser
+		err      error
+	)
+	reqBuf, err = io.ReadAll(r.Body)
+	if err != nil {
+		log.Panic(err)
+	}
+	err = json.Unmarshal(reqBuf, &jsonUser)
+	if err != nil {
+		log.Panic(err)
+	}
+	dbUser, err = backend.CallDbUserFabric(jsonUser)
+	if err != nil {
+		log.Panic(err)
+	}
+	var (
+		lastId int64
+	)
+	lastId, err = db.InsertUser(dbUser)
+	if err != nil {
+		log.Panic(err)
+	} else {
+		dbUser.SetId(lastId)
+	}
+	return
+}
+
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		return
+	}
+	if r.Header.Get("Content-Type") != "application/json" {
+		return
+	}
+	var (
+		reqBuf   []byte
+		jsonUser *backend.JsonUser
+		dbUser   *backend.DbUser
+		err      error
+	)
+	reqBuf, err = io.ReadAll(r.Body)
+	if err != nil {
+		log.Panic(err)
+	}
+	err = json.Unmarshal(reqBuf, jsonUser)
+	if err != nil {
+		log.Panic(err)
+	}
+	dbUser, err = backend.CallDbUserFabric(jsonUser)
+	if err != nil {
+		log.Panic(err)
+	}
+	var (
+		userToCompare backend.DbUser
+	)
+	userToCompare, err = db.SelectUser(userInstance.Name)
+	if err != nil {
+		log.Panic(err)
+	}
+	if dbUser.GetHashedPassword() != userToCompare.GetHashedPassword() {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	var (
+		jwtToken []byte
+	)
+	jwtToken, err = generateJwt(userInstance)
+	if err != nil {
+		log.Panic(err)
+	}
+	_, err = w.Write(jwtToken)
+	if err != nil {
+		log.Panic(err)
+	}
+	return
+}
 
 func calcHandler(w http.ResponseWriter, r *http.Request) {
 	var (
@@ -128,6 +218,8 @@ func writeInternalServerError(w http.ResponseWriter) {
 
 func getHandler() (handler http.Handler) {
 	var mux = http.NewServeMux()
+	mux.HandleFunc("/api/v1/register", registerHandler)
+	mux.HandleFunc("/api/v1/login", loginHandler)
 	mux.HandleFunc("/api/v1/calculate", calcHandler)
 	mux.HandleFunc("/api/v1/expressions", expressionsHandler)
 	mux.HandleFunc("/api/v1/expressions/{id}", expressionIdHandler)

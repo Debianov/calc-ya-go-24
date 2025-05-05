@@ -504,3 +504,60 @@ func TestSendTask(t *testing.T) {
 	t.Run("AbortedCode", testSendTaskAbortedCode)
 	t.Run("OkCode", testSendTaskOkCode)
 }
+
+var (
+	db = CallDbFabric()
+)
+
+func testRegisterHandlerNewUser(t *testing.T) {
+	t.Cleanup(func() {
+		db.FlushTable()
+	})
+	var (
+		requestsToTest    = []UserStub{{"hhh", "qwertyqwerty"}}
+		expectedResponses = []*backend.EmptyJson{}
+		commonHttpCase    = backend.HttpCases[UserStub, *backend.EmptyJson]{RequestsToSend: requestsToTest,
+			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/register",
+			ExpectedHttpCode: http.StatusOK}
+	)
+	testThroughHttpHandler(registerHandler, t, commonHttpCase)
+}
+
+func TestRegisterHandler(t *testing.T) {
+	t.Run("NewUser", testRegisterHandlerNewUser)
+}
+
+
+func TestLoginHandler(t *testing.T) {
+	var (
+		unregisteredUser = UserStub{
+			Login: "hhh123",
+			Password: "qwertyqwerty"
+		}
+		registeredUser = UserStub{
+			Login: "hhh",
+			Password: "qwertyqwerty"
+		}
+	)
+	prepareDb(db, registeredUser)
+	t.Run("UnregisteredUser", func(t *testing.T) {
+		var (
+			requestsToTest    = []UserStub{unregisteredUser}
+			expectedResponses = []backend.EmptyJson{{}}
+			commonHttpCase    = backend.HttpCases[UserStub, backend.EmptyJson]{RequestsToSend: requestsToTest,
+				ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/login",
+				ExpectedHttpCode: http.StatusUnauthorized}
+		)
+		testThroughHttpHandler(loginHandler, t, commonHttpCase)
+	})
+	t.Run("RegisteredUser", func(t *testing.T) {
+		var (
+			requestsToTest    = []UserStub{registeredUser}
+			expectedResponses = []backend.JwtTokenStub{{}} // jwt каждый раз рандом?
+			commonHttpCase    = backend.HttpCases[UserStub, backend.EmptyJson]{RequestsToSend: requestsToTest,
+				ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/login",
+				ExpectedHttpCode: http.Ok}
+		)
+		testThroughHttpHandler(loginHandler, t, commonHttpCase)
+	})
+}

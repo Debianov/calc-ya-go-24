@@ -5,6 +5,9 @@ package backend
 */
 
 import (
+	"context"
+	"database/sql"
+	"errors"
 	"iter"
 	"maps"
 	"sync"
@@ -338,4 +341,92 @@ func CallEmptyExpressionListFabric() *ExpressionsList {
 		mut:   sync.Mutex{},
 		exprs: make(map[int]*Expression),
 	}
+}
+
+type CommonUser interface {
+	GetLogin() string
+	SetLogin(string)
+	GetId() int64
+	SetId(int64)
+}
+
+type UserWithHashedPassword interface {
+	CommonUser
+	GetHashedPassword() string
+	SetHashedPassword(salt string) (err error)
+}
+
+type DbUser struct {
+	id             int64
+	login          string
+	hashedPassword string
+	hashMan        HashMan
+}
+
+func (d *DbUser) GetId() int64 {
+	return d.id
+}
+
+func (d *DbUser) SetId(newId int64) {
+	d.id = newId
+}
+
+func (d *DbUser) GetLogin() string {
+	return d.login
+}
+
+func (d *DbUser) SetLogin(login string) {
+	d.login = login
+}
+
+func (d *DbUser) GetHashedPassword() string {
+	return d.hashedPassword
+}
+
+/*
+SetHashedPassword генерирует по salt и устанавливает захешированный пароль.
+*/
+func (d *DbUser) SetHashedPassword(salt string) (err error) {
+	d.hashedPassword, err = d.hashMan.Generate(salt)
+	return
+}
+
+/*
+CallDbUserFabric устанавливает захешированный пароль, пригодный для хранения в db,
+а также переносит login, используя данные jsonUser.
+*/
+func CallDbUserFabric(jsonUser UserWithPassword) (instance *DbUser, err error) {
+	instance = &DbUser{}
+	instance.SetLogin(jsonUser.GetLogin())
+	err = instance.SetHashedPassword(jsonUser.GetPassword())
+	return
+}
+
+type Db struct {
+	ctx     context.Context
+	innerDb *sql.DB
+}
+
+func (d *Db) InsertUser(user UserWithHashedPassword) (lastId int64, err error) {
+	var (
+		query = `
+	INSERT INTO users (name, password) values ($1, $2)
+	`
+		result sql.Result
+	)
+	result, err = d.innerDb.ExecContext(d.ctx, query, user.GetLogin(), user.GetHashedPassword())
+	if err != nil {
+		return
+	}
+	lastId, err = result.LastInsertId()
+	return
+}
+
+func CallDbFabric() *Db {
+	var (
+		innerDb = GetDefaultSqlServer()
+		ctx     = context.TODO()
+	)
+	innerDb.PingContext(ctx)
+	return &Db{ctx: context.TODO(), innerDb: innerDb}
 }
