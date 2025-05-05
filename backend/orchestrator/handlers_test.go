@@ -506,7 +506,7 @@ func TestSendTask(t *testing.T) {
 }
 
 var (
-	db = CallDbFabric()
+	db, _ = CallTestDbFabric()
 )
 
 func testRegisterHandlerNewUser(t *testing.T) {

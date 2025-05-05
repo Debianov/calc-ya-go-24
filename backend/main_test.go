@@ -113,7 +113,7 @@ func TestIntegration(t *testing.T) {
 	}
 	defer stopServices()
 	t.Run("checkExpressions", checkExpressions)
-	//t.Run("checkAuth", checkAuth)
+	//t.Run("checkStatusSaving", checkStatusSaving)
 }
 
 func prepareServices() (stopFn func(), err error) {

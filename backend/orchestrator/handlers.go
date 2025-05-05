@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	db                                      = backend.CallDbFabric()
+	db, _                                   = CallDbFabric()
 	exprsList backend.CommonExpressionsList = backend.CallEmptyExpressionListFabric()
 )
 
@@ -30,8 +30,8 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	var (
 		reqBuf   []byte
-		jsonUser = backend.CallJsonUserFabric()
-		dbUser   *backend.DbUser
+		jsonUser = CallJsonUserFabric()
+		dbUser   *DbUser
 		err      error
 	)
 	reqBuf, err = io.ReadAll(r.Body)
@@ -42,7 +42,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Panic(err)
 	}
-	dbUser, err = backend.CallDbUserFabric(jsonUser)
+	dbUser, err = CallDbUserFabric(jsonUser)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -67,8 +67,8 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	var (
 		reqBuf   []byte
-		jsonUser *backend.JsonUser
-		dbUser   *backend.DbUser
+		jsonUser *JsonUser
+		dbUser   *DbUser
 		err      error
 	)
 	reqBuf, err = io.ReadAll(r.Body)
@@ -79,14 +79,14 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Panic(err)
 	}
-	dbUser, err = backend.CallDbUserFabric(jsonUser)
+	dbUser, err = CallDbUserFabric(jsonUser)
 	if err != nil {
 		log.Panic(err)
 	}
 	var (
-		userToCompare backend.DbUser
+		userToCompare DbUser
 	)
-	userToCompare, err = db.SelectUser(userInstance.Name)
+	userToCompare, err = db.SelectUser(dbUser.GetLogin())
 	if err != nil {
 		log.Panic(err)
 	}
@@ -97,7 +97,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	var (
 		jwtToken []byte
 	)
-	jwtToken, err = generateJwt(userInstance)
+	jwtToken, err = backend.GenerateJwt(*dbUser)
 	if err != nil {
 		log.Panic(err)
 	}
