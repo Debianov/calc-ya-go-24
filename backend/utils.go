@@ -2,10 +2,8 @@ package backend
 
 import (
 	"errors"
-	jwt2 "github.com/golang-jwt/jwt/v5"
-	"log"
+	"golang.org/x/crypto/bcrypt"
 	"os"
-	"time"
 )
 
 type EnvVar struct {
@@ -50,22 +48,18 @@ func convertToInt64Interface(arg interface{}) (result interface{}, err error) {
 	return
 }
 
-const hmacSampleSecret = "test_test"
+type HashMan struct {
+}
 
-func GenerateJwt(user main.DbUser) (tokenBuf []byte, err error) {
-	var currentTime = time.Now()
-	var jwtInstance = jwt2.NewWithClaims(jwt2.SigningMethodHS256, jwt2.MapClaims{
-		"login": user.GetLogin(),
-		"id":    user.GetId(),
-		"nbf":   currentTime.Unix(),
-		"exp":   currentTime.Add(5 * time.Minute).Unix(),
-		"iat":   currentTime.Unix(),
-	})
-	var token string
-	token, err = jwtInstance.SignedString([]byte(hmacSampleSecret))
+func (h *HashMan) Generate(salt string) (string, error) {
+	var (
+		saltedBytes = []byte(salt)
+		hashedBytes []byte
+		err         error
+	)
+	hashedBytes, err = bcrypt.GenerateFromPassword(saltedBytes, bcrypt.DefaultCost)
 	if err != nil {
-		log.Panic(err)
+		return "", err
 	}
-	tokenBuf = []byte(token)
-	return
+	return string(hashedBytes), nil
 }

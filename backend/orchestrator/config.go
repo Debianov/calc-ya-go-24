@@ -15,7 +15,15 @@ func GetDefaultGrpcServer() *GrpcTaskServer {
 }
 
 func GetDefaultSqlServer() *sql.DB {
-	var db, err = sql.Open("sqlite3", "store.db")
+	var db, err = sql.Open("sqlite3", "calc.db")
+	if err != nil {
+		log.Panic(err)
+	}
+	return db
+}
+
+func GetTestSqlServer() *sql.DB {
+	var db, err = sql.Open("sqlite3", "testCalc.db")
 	if err != nil {
 		log.Panic(err)
 	}

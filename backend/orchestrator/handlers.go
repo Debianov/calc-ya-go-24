@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	db, _                                   = CallDbFabric()
+	db        DbWrapper                     = CallDbFabric()
 	exprsList backend.CommonExpressionsList = backend.CallEmptyExpressionListFabric()
 )
 
@@ -97,7 +97,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	var (
 		jwtToken []byte
 	)
-	jwtToken, err = backend.GenerateJwt(*dbUser)
+	jwtToken, err = GenerateJwt(*dbUser)
 	if err != nil {
 		log.Panic(err)
 	}
