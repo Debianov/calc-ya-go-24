@@ -6,6 +6,7 @@ import (
 	"github.com/Debianov/calc-ya-go-24/backend"
 	pb "github.com/Debianov/calc-ya-go-24/backend/proto"
 	"github.com/Debianov/calc-ya-go-24/pkg"
+	_ "github.com/mattn/go-sqlite3"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"io"
@@ -42,7 +43,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Panic(err)
 	}
-	dbUser, err = CallDbUserFabric(jsonUser)
+	dbUser, err = wrapIntoDbUser(jsonUser)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -68,9 +69,9 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	var (
 		reqBuf   []byte
 		jsonUser *JsonUser
-		dbUser   *DbUser
 		err      error
 	)
+	jsonUser = &JsonUser{}
 	reqBuf, err = io.ReadAll(r.Body)
 	if err != nil {
 		log.Panic(err)
@@ -79,29 +80,30 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Panic(err)
 	}
-	dbUser, err = CallDbUserFabric(jsonUser)
-	if err != nil {
-		log.Panic(err)
-	}
 	var (
-		userToCompare DbUser
+		userFromDb UserWithHashedPassword
 	)
-	userToCompare, err = db.SelectUser(dbUser.GetLogin())
+	userFromDb, err = db.SelectUser(jsonUser.GetLogin())
 	if err != nil {
-		log.Panic(err)
+		w.WriteHeader(http.StatusUnauthorized)
+		return
 	}
-	if dbUser.GetHashedPassword() != userToCompare.GetHashedPassword() {
+	if !userFromDb.Is(jsonUser) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 	var (
-		jwtToken []byte
+		jwtToken        string
+		jwtTokenWrapper JwtTokenJsonWrapper
+		jwtTokenInBuf   []byte
 	)
-	jwtToken, err = GenerateJwt(*dbUser)
+	jwtToken, err = GenerateJwt(userFromDb)
 	if err != nil {
 		log.Panic(err)
 	}
-	_, err = w.Write(jwtToken)
+	jwtTokenWrapper.Token = jwtToken
+	jwtTokenInBuf, err = jwtTokenWrapper.Marshal()
+	_, err = w.Write(jwtTokenInBuf)
 	if err != nil {
 		log.Panic(err)
 	}

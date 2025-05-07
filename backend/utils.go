@@ -63,3 +63,10 @@ func (h *HashMan) Generate(salt string) (string, error) {
 	}
 	return string(hashedBytes), nil
 }
+
+func (h *HashMan) Compare(hashedPassword string, possibleRelevantPassword string) (err error) {
+	if err = bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(possibleRelevantPassword)); err != nil {
+		err = errors.New("хеш не соответствует паролю, либо возникла другая ошибка")
+	}
+	return
+}

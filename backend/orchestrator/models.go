@@ -1,6 +1,9 @@
 package main
 
-import "github.com/Debianov/calc-ya-go-24/backend"
+import (
+	"encoding/json"
+	"github.com/Debianov/calc-ya-go-24/backend"
+)
 
 type CommonUser interface {
 	GetLogin() string
@@ -9,16 +12,17 @@ type CommonUser interface {
 	SetId(int64)
 }
 
-type UserWithHashedPassword interface {
-	CommonUser
-	GetHashedPassword() string
-	SetHashedPassword(salt string) (err error)
-}
-
 type UserWithPassword interface {
 	CommonUser
 	GetPassword() string
 	SetPassword(password string)
+}
+
+type UserWithHashedPassword interface {
+	CommonUser
+	GetHashedPassword() string
+	SetHashedPassword(salt string) (err error)
+	Is(password UserWithPassword) bool
 }
 
 /*
@@ -96,13 +100,36 @@ func (d *DbUser) SetHashedPassword(salt string) (err error) {
 	return
 }
 
+// Is сравнивает пользовательские экземпляры по соответствию логина и пароля.
+func (d *DbUser) Is(user UserWithPassword) (status bool) {
+	var (
+		err error
+	)
+	if user.GetLogin() != d.GetLogin() {
+		return
+	}
+	if err = d.hashMan.Compare(d.GetHashedPassword(), user.GetPassword()); err != nil {
+		return
+	}
+	status = true
+	return
+}
+
 /*
-CallDbUserFabric устанавливает захешированный пароль, пригодный для хранения в db,
+wrapIntoDbUser устанавливает захешированный пароль, пригодный для хранения в db,
 а также переносит login, используя данные jsonUser.
 */
-func CallDbUserFabric(jsonUser UserWithPassword) (instance *DbUser, err error) {
+func wrapIntoDbUser(jsonUser UserWithPassword) (instance *DbUser, err error) {
 	instance = &DbUser{}
 	instance.SetLogin(jsonUser.GetLogin())
 	err = instance.SetHashedPassword(jsonUser.GetPassword())
 	return
+}
+
+type JwtTokenJsonWrapper struct {
+	Token string `json:"token"`
+}
+
+func (j *JwtTokenJsonWrapper) Marshal() (result []byte, err error) {
+	return json.Marshal(j)
 }

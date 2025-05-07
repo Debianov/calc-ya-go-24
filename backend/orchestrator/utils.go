@@ -1,27 +1,49 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"github.com/golang-jwt/jwt/v5"
 	"log"
 	"time"
 )
 
-const hmacSampleSecret = "test_test"
+const TodoSecretToDefendEnv = "not_under_deploy_not_under_deploy"
 
-func GenerateJwt(user DbUser) (tokenBuf []byte, err error) {
+func GenerateJwt(user CommonUser) (token string, err error) {
 	var currentTime = time.Now()
 	var jwtInstance = jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"login": user.GetLogin(),
 		"id":    user.GetId(),
 		"nbf":   currentTime.Unix(),
-		"exp":   currentTime.Add(5 * time.Minute).Unix(),
+		"exp":   currentTime.Add(10 * time.Minute).Unix(),
 		"iat":   currentTime.Unix(),
 	})
-	var token string
-	token, err = jwtInstance.SignedString([]byte(hmacSampleSecret))
+	token, err = jwtInstance.SignedString([]byte(TodoSecretToDefendEnv))
 	if err != nil {
 		log.Panic(err)
 	}
-	tokenBuf = []byte(token)
+	return
+}
+
+func ParseJwt(token string) (user CommonUser, err error) {
+	user = &DbUser{}
+	var tokenFromString *jwt.Token
+	tokenFromString, err = jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			panic(fmt.Errorf("метод подписи токена %v не ожидается", token.Header["alg"]))
+		}
+		return []byte(TodoSecretToDefendEnv), nil
+	})
+	if err != nil {
+		return
+	}
+	claims, ok := tokenFromString.Claims.(jwt.MapClaims)
+	if !ok {
+		err = errors.New("не удалось прочитать структуру токена")
+		return
+	}
+	user.SetLogin(claims["login"].(string))
+	user.SetId(int64(claims["id"].(float64)))
 	return
 }

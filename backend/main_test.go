@@ -98,10 +98,6 @@ func callExpressionsApi(t *testing.T, entriesLen int) (result []ExpressionStub) 
 	return
 }
 
-func checkAuth(t *testing.T) {
-
-}
-
 func TestIntegration(t *testing.T) {
 	var (
 		err          error
@@ -137,6 +133,9 @@ func prepareServices() (stopFn func(), err error) {
 		syscall.Kill(-agentPgid, syscall.SIGINT)
 	}
 	time.Sleep(1 * time.Second) // процессы не успевают подняться
+	// TODO:
+	// registerUserInOrchestrator
+	// getTokenFromOrchestrator
 	return
 }
 

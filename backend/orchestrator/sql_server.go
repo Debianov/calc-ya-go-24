@@ -8,7 +8,7 @@ import (
 
 type DbWrapper interface {
 	InsertUser(user UserWithHashedPassword) (lastId int64, err error)
-	SelectUser(login string) (user *DbUser, err error)
+	SelectUser(login string) (user UserWithHashedPassword, err error)
 	Flush() (err error)
 	Close() (err error)
 }
@@ -33,14 +33,15 @@ func (d *Db) InsertUser(user UserWithHashedPassword) (lastId int64, err error) {
 	return
 }
 
-func (d *Db) SelectUser(login string) (user *DbUser, err error) {
+func (d *Db) SelectUser(login string) (resultedUser UserWithHashedPassword, err error) {
 	var (
 		query = `
 	SELECT id, login, password FROM users WHERE login=$1
 	`
 	)
-	user = &DbUser{}
-	err = d.innerDb.QueryRowContext(d.ctx, query, login).Scan(user.id, user.login, user.hashedPassword)
+	var user = &DbUser{}
+	err = d.innerDb.QueryRowContext(d.ctx, query, login).Scan(&user.id, &user.login, &user.hashedPassword)
+	resultedUser = UserWithHashedPassword(user)
 	return
 }
 

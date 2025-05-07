@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/Debianov/calc-ya-go-24/backend"
+	"log"
 )
 
 type ExpressionsListStub struct {
@@ -58,51 +59,60 @@ func callExprsListStubFabric(expressions ...backend.ExpressionStub) (result *Exp
 	return
 }
 
-type StubDb struct {
+type DbStub struct {
 	lastId int64
 	users  map[string]UserWithHashedPassword
 }
 
-func (s *StubDb) InsertUser(user UserWithHashedPassword) (lastId int64, err error) {
+func (s *DbStub) InsertUser(user UserWithHashedPassword) (lastId int64, err error) {
 	s.users[user.GetLogin()] = user
 	lastId++
 	return lastId, nil
 }
 
-func (s *StubDb) SelectUser(login string) (user *DbUser, err error) {
+func (s *DbStub) SelectUser(login string) (user UserWithHashedPassword, err error) {
 	v, ok := s.users[login]
 	if !ok {
 		err = errors.New("элемент не найден")
 		return
 	}
-	return v.(*DbUser), nil
+	return v, nil
 }
 
-func (s *StubDb) Flush() (err error) {
+func (s *DbStub) Flush() (err error) {
 	s.users = make(map[string]UserWithHashedPassword)
 	return
 }
 
-func (s *StubDb) Close() (err error) {
+func (s *DbStub) Close() (err error) {
 	return
 }
 
-func callStubDbFabric() *StubDb {
-	return &StubDb{users: make(map[string]UserWithHashedPassword)}
+func callStubDbFabric() *DbStub {
+	return &DbStub{users: make(map[string]UserWithHashedPassword)}
 }
 
-func callStubDbWithRegisteredUserFabric(users ...UserWithHashedPassword) *StubDb {
-	var usersToStub = make(map[string]UserWithHashedPassword)
+func callStubDbWithRegisteredUserFabric(users ...UserStub) *DbStub {
+	var (
+		usersToStub = make(map[string]UserWithHashedPassword)
+		err         error
+	)
 	for _, user := range users {
-		usersToStub[user.GetLogin()] = user
+		err = user.SetHashedPassword(user.GetPassword())
+		if err != nil {
+			log.Panic(err)
+		}
+		usersToStub[user.GetLogin()] = &user
 	}
-	return &StubDb{users: usersToStub}
+	return &DbStub{users: usersToStub}
 }
 
 type UserStub struct {
-	Login    string `json:"login"`
-	Password string `json:"password"`
-	id       int64
+	hashMan        backend.HashMan
+	Login          string `json:"login"`
+	Password       string `json:"password"`
+	hashedPassword string
+	id             int64
 }
 
 func (u *UserStub) Marshal() (result []byte, err error) {
@@ -110,8 +120,7 @@ func (u *UserStub) Marshal() (result []byte, err error) {
 }
 
 func (u *UserStub) GetLogin() string {
-	//TODO implement me
-	panic("implement me")
+	return u.Login
 }
 
 func (u *UserStub) SetLogin(s string) {
@@ -120,8 +129,7 @@ func (u *UserStub) SetLogin(s string) {
 }
 
 func (u *UserStub) GetId() int64 {
-	//TODO implement me
-	panic("implement me")
+	return u.id
 }
 
 func (u *UserStub) SetId(i int64) {
@@ -129,19 +137,47 @@ func (u *UserStub) SetId(i int64) {
 	panic("implement me")
 }
 
+func (u *UserStub) GetPassword() string {
+	return u.Password
+}
+
+func (u *UserStub) SetPassword(password string) {
+	u.Password = password
+}
+
 func (u *UserStub) GetHashedPassword() string {
-	//TODO implement me
-	panic("implement me")
+	return u.hashedPassword
 }
 
 func (u *UserStub) SetHashedPassword(salt string) (err error) {
-	//TODO implement me
-	panic("implement me")
+	u.hashedPassword, err = u.hashMan.Generate(salt)
+	return
+}
+
+func (u *UserStub) Is(user UserWithPassword) (status bool) {
+	var (
+		err error
+	)
+	if err = u.hashMan.Compare(u.GetHashedPassword(), user.GetPassword()); err != nil {
+		return
+	}
+	status = true
+	return
+}
+
+type parsedToken interface {
+	backend.JsonPayload
+	GetExpectedUser() CommonUser
 }
 
 type jwtTokenStub struct {
+	ExpectedUser CommonUser
 }
 
 func (j *jwtTokenStub) Marshal() (result []byte, err error) {
 	return json.Marshal(j)
+}
+
+func (j *jwtTokenStub) GetExpectedUser() CommonUser {
+	return j.ExpectedUser
 }

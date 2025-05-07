@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/Debianov/calc-ya-go-24/backend"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -21,67 +23,133 @@ import (
 
 var compareTemplate = "ожидается \"%s\", получен \"%s\""
 
-// testThroughHttpHandler запускает все тесты через handler, используя параметры testCases.
-// Генерируемый запрос всегда отправляется с заголовком "Content-Type": "application/json".
+/*
+testThroughHttpHandler запускает все тесты через handler, используя параметры casesHandler.
+Генерируемый запрос всегда отправляется с заголовком "Content-Type": "application/json".
+*/
 func testThroughHttpHandler[K, V backend.JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
-	testCases backend.HttpCases[K, V]) {
+	casesHandler backend.HttpCasesHandler[K, V], compareFunc func(t *testing.T, w *httptest.ResponseRecorder,
+	casesHandler backend.CasesHandler, currentTestCase backend.ByteCase)) {
 	var (
 		cases []backend.ByteCase
 		err   error
 	)
-	cases, err = backend.ConvertToByteCases(testCases.RequestsToSend, testCases.ExpectedResponses)
+	cases, err = backend.ConvertToByteCases(casesHandler.RequestsToSend, casesHandler.ExpectedResponses)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, testCase := range cases {
 		var (
 			w      = httptest.NewRecorder()
-			reader = bytes.NewReader(testCase.ToOutput)
-			req    = httptest.NewRequest(testCases.HttpMethod, testCases.UrlTarget, reader)
+			reader = bytes.NewReader(testCase.ToSend)
+			req    = httptest.NewRequest(casesHandler.HttpMethod, casesHandler.UrlTarget, reader)
 		)
 		req.Header.Set("Content-Type", "application/json")
 		handler(w, req)
-		if testCases.ExpectedHttpCode != w.Code {
-			t.Errorf(compareTemplate, strconv.Itoa(testCases.ExpectedHttpCode),
-				strconv.Itoa(w.Code))
-		}
-		if bytes.Compare(testCase.Expected, w.Body.Bytes()) != 0 {
-			t.Errorf(compareTemplate, testCase.Expected, w.Body.Bytes())
-		}
+		compareFunc(t, w, &casesHandler, testCase)
 	}
 }
 
-// testThroughServeMux работает также, как и testThroughHttpHandler, но с обёрткой handler-а в http.ServerMux.
-// Необходимо для тестирования некоторых handler-ов, которые вызывают методы, связанные с парсингом URL в запросах
-// (например, request.PathValue): парсинг происходит только при вызове http.ServerMux
-// (https://pkg.go.dev/net/http#ServeMux).
-func testThroughServeMux[K, V backend.JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
-	testCases backend.ServerMuxHttpCases[K, V]) {
+/*
+testThroughServeMux работает также, как и testThroughHttpHandler, но с обёрткой handler-а в http.ServerMux.
+Необходимо для тестирования некоторых handler-ов, которые вызывают методы, связанные с парсингом URL в запросах
+к handler-у (например, request.PathValue): парсинг происходит только при вызове http.ServerMux
+(https://pkg.go.dev/net/http#ServeMux).
+*/
+func testThroughServeMux[K, V backend.JsonPayload](
+	handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
+	casesHandler backend.ServerMuxHttpCasesHandler[K, V], compareFunc func(t *testing.T, w *httptest.ResponseRecorder,
+	casesHandler backend.CasesHandler, currentTestCase backend.ByteCase)) {
 	var (
 		cases []backend.ByteCase
 		err   error
 	)
-	cases, err = backend.ConvertToByteCases(testCases.RequestsToSend, testCases.ExpectedResponses)
+	cases, err = backend.ConvertToByteCases(casesHandler.RequestsToSend, casesHandler.ExpectedResponses)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, testCase := range cases {
 		var (
 			w         = httptest.NewRecorder()
-			reader    = bytes.NewReader(testCase.ToOutput)
-			req       = httptest.NewRequest(testCases.HttpMethod, testCases.UrlTarget, reader)
+			reader    = bytes.NewReader(testCase.ToSend)
+			req       = httptest.NewRequest(casesHandler.HttpMethod, casesHandler.UrlTarget, reader)
 			serverMux = http.NewServeMux()
 		)
 		req.Header.Set("Content-Type", "application/json")
-		serverMux.HandleFunc(testCases.UrlTemplate, handler)
+		serverMux.HandleFunc(casesHandler.UrlTemplate, handler)
 		serverMux.ServeHTTP(w, req)
-		if testCases.ExpectedHttpCode != w.Code {
-			t.Errorf(compareTemplate, strconv.Itoa(testCases.ExpectedHttpCode),
+		compareFunc(t, w, &casesHandler, testCase)
+	}
+}
+
+func defaultCmpFunc(t *testing.T, w *httptest.ResponseRecorder,
+	casesHandler backend.CasesHandler, currentTestCase backend.ByteCase) {
+	if casesHandler.GetExpectedHttpCode() != w.Code {
+		t.Errorf(compareTemplate, strconv.Itoa(casesHandler.GetExpectedHttpCode()),
+			strconv.Itoa(w.Code))
+	}
+	if bytes.Compare(currentTestCase.Expected, w.Body.Bytes()) != 0 {
+		t.Errorf(compareTemplate, currentTestCase.Expected, w.Body.Bytes())
+	}
+}
+
+/*
+testByStructCompareThroughHttpHandler переводит case-ы в backend.ByteCase, но
+сравнивает структуры, что может быть принципиально важно, если идёт тестирование
+handler-ов, которые возвращают байт-строки с данными, нуждающиеся в
+манипуляциях для того, чтобы они были пригодны для сравнения
+Например, jwt-токены. Их нельзя сравнивать напрямую, т.к в любой отрезок времени
+возвращается уникальная последовательность символов.
+*/
+func testByStructCompareThroughHttpHandler[K backend.JsonPayload, V parsedToken](
+	handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
+	casesHandler backend.HttpCasesHandler[K, V]) {
+	var (
+		cases      []backend.ByteCase
+		emptyJsons = make([]backend.EmptyJson, len(casesHandler.ExpectedResponses)) // ExpectedResponses не будут
+		// использоваться, поэтому мы заменяем их на пустые json-ы. Однако, мы должны передавать такое количество,
+		//которое будет = casesHandler.RequestsToSend
+		err error
+	)
+	cases, err = backend.ConvertToByteCases(casesHandler.RequestsToSend, emptyJsons)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for ind, testCase := range cases {
+		var (
+			w      = httptest.NewRecorder()
+			reader = bytes.NewReader(testCase.ToSend)
+			req    = httptest.NewRequest(casesHandler.HttpMethod, casesHandler.UrlTarget, reader)
+		)
+		req.Header.Set("Content-Type", "application/json")
+		handler(w, req)
+		if casesHandler.GetExpectedHttpCode() != w.Code {
+			t.Errorf(compareTemplate, strconv.Itoa(casesHandler.GetExpectedHttpCode()),
 				strconv.Itoa(w.Code))
 		}
-		if bytes.Compare(testCase.Expected, w.Body.Bytes()) != 0 {
-			t.Errorf(compareTemplate, testCase.Expected, w.Body.Bytes())
+		var (
+			err       error
+			respBuf   []byte
+			realToken JwtTokenJsonWrapper
+		)
+		respBuf, err = io.ReadAll(w.Body)
+		if err != nil {
+			t.Fatal(err)
 		}
+		err = json.Unmarshal(respBuf, &realToken)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var (
+			userFromParsedToken   CommonUser
+			userFromExpectedToken = casesHandler.ExpectedResponses[ind].GetExpectedUser()
+		)
+		userFromParsedToken, err = ParseJwt(realToken.Token)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.Equal(t, userFromExpectedToken.GetLogin(), userFromParsedToken.GetLogin())
+		assert.Equal(t, userFromExpectedToken.GetId(), userFromParsedToken.GetId())
 	}
 }
 
@@ -90,13 +158,13 @@ func testCalcHandler201(t *testing.T) {
 		exprsList = backend.CallEmptyExpressionListFabric()
 	})
 	var (
-		requestsToTest    = []backend.RequestJson{{"2+2*4"}, {"4*2+3*5"}}
+		requestsToTest    = []*backend.RequestJson{{"2+2*4"}, {"4*2+3*5"}}
 		expectedResponses = []*backend.ExpressionJsonStub{{ID: 0}, {ID: 1}}
-		commonHttpCase    = backend.HttpCases[backend.RequestJson, *backend.ExpressionJsonStub]{RequestsToSend: requestsToTest,
+		commonHttpCase    = backend.HttpCasesHandler[*backend.RequestJson, *backend.ExpressionJsonStub]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/calculate",
 			ExpectedHttpCode: http.StatusCreated}
 	)
-	testThroughHttpHandler(calcHandler, t, commonHttpCase)
+	testThroughHttpHandler(calcHandler, t, commonHttpCase, defaultCmpFunc)
 
 	var (
 		expectedLen               = len(expectedResponses)
@@ -145,22 +213,22 @@ func testCalcHandler422(t *testing.T) {
 		requestsToTest = []backend.RequestJson{{"2++2*4"}, {"4*(2+3"}, {"8+2/3)"},
 			{"4*()2+3"}}
 		expectedResponses = []backend.EmptyJson{{}, {}, {}, {}}
-		commonHttpCase    = backend.HttpCases[backend.RequestJson, backend.EmptyJson]{RequestsToSend: requestsToTest,
+		commonHttpCase    = backend.HttpCasesHandler[backend.RequestJson, backend.EmptyJson]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/calculate",
 			ExpectedHttpCode: http.StatusUnprocessableEntity}
 	)
-	testThroughHttpHandler(calcHandler, t, commonHttpCase)
+	testThroughHttpHandler(calcHandler, t, commonHttpCase, defaultCmpFunc)
 }
 
 func testCalcHandlerGet(t *testing.T) {
 	var (
 		requestsToTest    = []backend.RequestJson{{"2+2*4"}}
 		expectedResponses = []*backend.EmptyJson{{}}
-		commonHttpCase    = backend.HttpCases[backend.RequestJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
+		commonHttpCase    = backend.HttpCasesHandler[backend.RequestJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/calculate",
 			ExpectedHttpCode: http.StatusOK}
 	)
-	testThroughHttpHandler(calcHandler, t, commonHttpCase)
+	testThroughHttpHandler(calcHandler, t, commonHttpCase, defaultCmpFunc)
 }
 
 func TestCalcHandler(t *testing.T) {
@@ -182,11 +250,11 @@ func testExpressionsHandler200(t *testing.T) {
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.ExpressionsJsonTitleStub{{expectedExpressions}}
-		commonHttpCase    = backend.HttpCases[backend.EmptyJson, *backend.ExpressionsJsonTitleStub]{RequestsToSend: requestsToTest,
+		commonHttpCase    = backend.HttpCasesHandler[backend.EmptyJson, *backend.ExpressionsJsonTitleStub]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/expressions",
 			ExpectedHttpCode: http.StatusOK}
 	)
-	testThroughHttpHandler(expressionsHandler, t, commonHttpCase)
+	testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
 }
 
 func testExpressionsHandlerPost(t *testing.T) {
@@ -200,11 +268,11 @@ func testExpressionsHandlerPost(t *testing.T) {
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.EmptyJson{{}}
-		commonHttpCase    = backend.HttpCases[backend.EmptyJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
+		commonHttpCase    = backend.HttpCasesHandler[backend.EmptyJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/expressions",
 			ExpectedHttpCode: http.StatusOK}
 	)
-	testThroughHttpHandler(expressionsHandler, t, commonHttpCase)
+	testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
 }
 
 func testExpressionsHandlerEmpty(t *testing.T) {
@@ -212,11 +280,11 @@ func testExpressionsHandlerEmpty(t *testing.T) {
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.ExpressionsJsonTitle{{Expressions: make([]backend.CommonExpression, 0)}}
-		commonHttpCase    = backend.HttpCases[backend.EmptyJson, *backend.ExpressionsJsonTitle]{RequestsToSend: requestsToTest,
+		commonHttpCase    = backend.HttpCasesHandler[backend.EmptyJson, *backend.ExpressionsJsonTitle]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/expressions",
 			ExpectedHttpCode: http.StatusOK}
 	)
-	testThroughHttpHandler(expressionsHandler, t, commonHttpCase)
+	testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
 
 }
 
@@ -240,12 +308,12 @@ func testExpressionIdHandler200(t *testing.T) {
 			var (
 				requestsToTest    = []backend.EmptyJson{{}}
 				expectedResponses = []*backend.ExpressionJsonTitleStub{{expExpr}}
-				serverMuxHttpCase = backend.ServerMuxHttpCases[backend.EmptyJson, *backend.ExpressionJsonTitleStub]{
+				serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[backend.EmptyJson, *backend.ExpressionJsonTitleStub]{
 					RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
 					UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: fmt.Sprintf("/api/v1/expressions/%d", ind),
 					ExpectedHttpCode: http.StatusOK}
 			)
-			testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
+			testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
 		})
 	}
 }
@@ -261,12 +329,12 @@ func testExpressionIdHandler404(t *testing.T) {
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.EmptyJson{{}}
-		serverMuxHttpCase = backend.ServerMuxHttpCases[backend.EmptyJson, *backend.EmptyJson]{
+		serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[backend.EmptyJson, *backend.EmptyJson]{
 			RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
 			UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/1",
 			ExpectedHttpCode: http.StatusNotFound}
 	)
-	testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
+	testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
 }
 
 func testExpressionIdHandlerPost(t *testing.T) {
@@ -280,12 +348,12 @@ func testExpressionIdHandlerPost(t *testing.T) {
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.EmptyJson{{}}
-		serverMuxHttpCase = backend.ServerMuxHttpCases[backend.EmptyJson, *backend.EmptyJson]{
+		serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[backend.EmptyJson, *backend.EmptyJson]{
 			RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "POST",
 			UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
 			ExpectedHttpCode: http.StatusOK}
 	)
-	testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
+	testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
 }
 
 func testExpressionIdHandlerEmpty(t *testing.T) {
@@ -293,12 +361,12 @@ func testExpressionIdHandlerEmpty(t *testing.T) {
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.EmptyJson{{}}
-		serverMuxHttpCase = backend.ServerMuxHttpCases[backend.EmptyJson, *backend.EmptyJson]{
+		serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[backend.EmptyJson, *backend.EmptyJson]{
 			RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
 			UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
 			ExpectedHttpCode: http.StatusNotFound}
 	)
-	testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
+	testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
 }
 
 func TestExpressionIdHandler(t *testing.T) {
@@ -517,11 +585,11 @@ func testRegisterHandlerNewUser(t *testing.T) {
 	var (
 		requestsToTest    = []*UserStub{{Login: "hhh", Password: "qwertyqwerty"}}
 		expectedResponses = []*backend.EmptyJson{{}}
-		commonHttpCase    = backend.HttpCases[*UserStub, *backend.EmptyJson]{RequestsToSend: requestsToTest,
+		commonHttpCase    = backend.HttpCasesHandler[*UserStub, *backend.EmptyJson]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/register",
 			ExpectedHttpCode: http.StatusOK}
 	)
-	testThroughHttpHandler(registerHandler, t, commonHttpCase)
+	testThroughHttpHandler(registerHandler, t, commonHttpCase, defaultCmpFunc)
 }
 
 func TestRegisterHandler(t *testing.T) {
@@ -535,30 +603,47 @@ func TestLoginHandler(t *testing.T) {
 			Login:    "hhh123",
 			Password: "qwertyqwerty",
 		}
-		registeredUser = &UserStub{
+		registeredUserWithCorrectPassword = &UserStub{
 			Login:    "hhh",
 			Password: "qwertyqwerty",
 		}
+		registeredUserWithWrongPassword = &UserStub{
+			Login:    registeredUserWithCorrectPassword.Login,
+			Password: "asdasdsad",
+		}
 	)
-	db = callStubDbWithRegisteredUserFabric(registeredUser)
+	db = callStubDbWithRegisteredUserFabric(*registeredUserWithCorrectPassword, *registeredUserWithCorrectPassword)
+
 	t.Run("UnregisteredUserLogin", func(t *testing.T) {
 		var (
 			requestsToTest    = []*UserStub{unregisteredUser}
 			expectedResponses = []backend.EmptyJson{{}}
-			commonHttpCase    = backend.HttpCases[*UserStub, backend.EmptyJson]{RequestsToSend: requestsToTest,
+			commonHttpCase    = backend.HttpCasesHandler[*UserStub, backend.EmptyJson]{RequestsToSend: requestsToTest,
 				ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/login",
 				ExpectedHttpCode: http.StatusUnauthorized}
 		)
-		testThroughHttpHandler(loginHandler, t, commonHttpCase)
+		testThroughHttpHandler(loginHandler, t, commonHttpCase, defaultCmpFunc)
 	})
-	t.Run("RegisteredUserLogin", func(t *testing.T) {
+	t.Run("RegisteredUserLoginWithWrongPassword", func(t *testing.T) {
 		var (
-			requestsToTest    = []*UserStub{registeredUser}
-			expectedResponses = []*jwtTokenStub{{}}
-			commonHttpCase    = backend.HttpCases[*UserStub, *jwtTokenStub]{RequestsToSend: requestsToTest,
+			requestsToTest    = []*UserStub{registeredUserWithWrongPassword}
+			expectedResponses = []*backend.EmptyJson{{}}
+			commonHttpCase    = backend.HttpCasesHandler[*UserStub, *backend.EmptyJson]{RequestsToSend: requestsToTest,
 				ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/login",
+				ExpectedHttpCode: http.StatusUnauthorized}
+		)
+		testThroughHttpHandler(loginHandler, t, commonHttpCase, defaultCmpFunc)
+	})
+	t.Run("RegisteredUserLoginWithCorrectPassword", func(t *testing.T) {
+		var (
+			requestsToTest                 = []*UserStub{registeredUserWithCorrectPassword}
+			expectedNonIdempotentInstances = []*jwtTokenStub{{ExpectedUser: registeredUserWithCorrectPassword}}
+			commonHttpCase                 = backend.HttpCasesHandler[*UserStub, *jwtTokenStub]{RequestsToSend: requestsToTest,
+				ExpectedResponses: expectedNonIdempotentInstances, HttpMethod: "POST", UrlTarget: "/api/v1/login",
 				ExpectedHttpCode: http.StatusOK}
 		)
-		testThroughHttpHandler(loginHandler, t, commonHttpCase)
+		testByStructCompareThroughHttpHandler(loginHandler, t, commonHttpCase)
 	})
+	//t.Run("AuthenticatedUser", func(t *testing.T) {
+	//})
 }
