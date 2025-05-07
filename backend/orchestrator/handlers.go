@@ -18,8 +18,8 @@ import (
 )
 
 var (
-	db        DbWrapper                     = CallDbFabric()
-	exprsList backend.CommonExpressionsList = backend.CallEmptyExpressionListFabric()
+	db        DbWrapper             = CallDbFabric()
+	exprsList CommonExpressionsList = CallEmptyExpressionListFabric()
 )
 
 func registerHandler(w http.ResponseWriter, r *http.Request) {

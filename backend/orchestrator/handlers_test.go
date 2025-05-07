@@ -29,7 +29,7 @@ testThroughHttpHandler запускает все тесты через handler, 
 */
 func testThroughHttpHandler[K, V backend.JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
 	casesHandler backend.HttpCasesHandler[K, V], compareFunc func(t *testing.T, w *httptest.ResponseRecorder,
-	casesHandler backend.CasesHandler, currentTestCase backend.ByteCase)) {
+		casesHandler backend.CasesHandler, currentTestCase backend.ByteCase)) {
 	var (
 		cases []backend.ByteCase
 		err   error
@@ -59,7 +59,7 @@ testThroughServeMux работает также, как и testThroughHttpHandle
 func testThroughServeMux[K, V backend.JsonPayload](
 	handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
 	casesHandler backend.ServerMuxHttpCasesHandler[K, V], compareFunc func(t *testing.T, w *httptest.ResponseRecorder,
-	casesHandler backend.CasesHandler, currentTestCase backend.ByteCase)) {
+		casesHandler backend.CasesHandler, currentTestCase backend.ByteCase)) {
 	var (
 		cases []backend.ByteCase
 		err   error
@@ -155,7 +155,7 @@ func testByStructCompareThroughHttpHandler[K backend.JsonPayload, V parsedToken]
 
 func testCalcHandler201(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.CallEmptyExpressionListFabric()
+		exprsList = CallEmptyExpressionListFabric()
 	})
 	var (
 		requestsToTest    = []*backend.RequestJson{{"2+2*4"}, {"4*2+3*5"}}
@@ -239,7 +239,7 @@ func TestCalcHandler(t *testing.T) {
 
 func testExpressionsHandler200(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.CallEmptyExpressionListFabric()
+		exprsList = CallEmptyExpressionListFabric()
 	})
 	var (
 		expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0},
@@ -259,7 +259,7 @@ func testExpressionsHandler200(t *testing.T) {
 
 func testExpressionsHandlerPost(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.CallEmptyExpressionListFabric()
+		exprsList = CallEmptyExpressionListFabric()
 	})
 	var (
 		expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
@@ -276,7 +276,7 @@ func testExpressionsHandlerPost(t *testing.T) {
 }
 
 func testExpressionsHandlerEmpty(t *testing.T) {
-	exprsList = backend.CallEmptyExpressionListFabric()
+	exprsList = CallEmptyExpressionListFabric()
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.ExpressionsJsonTitle{{Expressions: make([]backend.CommonExpression, 0)}}
@@ -296,7 +296,7 @@ func TestExpressionHandler(t *testing.T) {
 
 func testExpressionIdHandler200(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.CallEmptyExpressionListFabric()
+		exprsList = CallEmptyExpressionListFabric()
 	})
 	var (
 		expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0},
@@ -320,7 +320,7 @@ func testExpressionIdHandler200(t *testing.T) {
 
 func testExpressionIdHandler404(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.CallEmptyExpressionListFabric()
+		exprsList = CallEmptyExpressionListFabric()
 	})
 	var (
 		expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
@@ -339,7 +339,7 @@ func testExpressionIdHandler404(t *testing.T) {
 
 func testExpressionIdHandlerPost(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.CallEmptyExpressionListFabric()
+		exprsList = CallEmptyExpressionListFabric()
 	})
 	var (
 		expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
@@ -357,7 +357,7 @@ func testExpressionIdHandlerPost(t *testing.T) {
 }
 
 func testExpressionIdHandlerEmpty(t *testing.T) {
-	exprsList = backend.CallEmptyExpressionListFabric()
+	exprsList = CallEmptyExpressionListFabric()
 	var (
 		requestsToTest    = []backend.EmptyJson{{}}
 		expectedResponses = []*backend.EmptyJson{{}}
@@ -432,7 +432,7 @@ func testGetTaskNotFoundCode(t *testing.T) {
 		err    error
 	)
 	t.Cleanup(func() {
-		exprsList = backend.CallEmptyExpressionListFabric()
+		exprsList = CallEmptyExpressionListFabric()
 	})
 	exprsList = callExprsListStubFabric()
 	result, err = g.GetTask(context.TODO(), &pb.Empty{})
@@ -448,7 +448,7 @@ func testGetTaskInternalCode(t *testing.T) {
 		err    error
 	)
 	t.Cleanup(func() {
-		exprsList = backend.CallEmptyExpressionListFabric()
+		exprsList = CallEmptyExpressionListFabric()
 	})
 	exprsList = callExprsListStubFabric(backend.ExpressionStub{
 		Id:           0,
@@ -468,7 +468,7 @@ func testGetTaskOkCode(t *testing.T) {
 		err    error
 	)
 	t.Cleanup(func() {
-		exprsList = backend.CallEmptyExpressionListFabric()
+		exprsList = CallEmptyExpressionListFabric()
 	})
 	var (
 		expectedTask = backend.CallTaskFabric(0, 2, 4, "+", backend.ReadyToCalc)
@@ -501,7 +501,7 @@ func TestGetTask(t *testing.T) {
 
 func testSendTaskNotFoundCode(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.CallEmptyExpressionListFabric()
+		exprsList = CallEmptyExpressionListFabric()
 	})
 	var (
 		g      = GetDefaultGrpcServer()
@@ -518,7 +518,7 @@ func testSendTaskNotFoundCode(t *testing.T) {
 
 func testSendTaskAbortedCode(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.CallEmptyExpressionListFabric()
+		exprsList = CallEmptyExpressionListFabric()
 	})
 	var (
 		g      = GetDefaultGrpcServer()
@@ -541,7 +541,7 @@ func testSendTaskAbortedCode(t *testing.T) {
 
 func testSendTaskOkCode(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.CallEmptyExpressionListFabric()
+		exprsList = CallEmptyExpressionListFabric()
 	})
 	var (
 		g              = GetDefaultGrpcServer()

@@ -3,6 +3,9 @@ package main
 import (
 	"encoding/json"
 	"github.com/Debianov/calc-ya-go-24/backend"
+	"iter"
+	"maps"
+	"sync"
 )
 
 type CommonUser interface {
@@ -132,4 +135,84 @@ type JwtTokenJsonWrapper struct {
 
 func (j *JwtTokenJsonWrapper) Marshal() (result []byte, err error) {
 	return json.Marshal(j)
+}
+
+type CommonExpressionsList interface {
+	AddExprFabric(postfix []string) (newExpr backend.CommonExpression, newId int)
+	GetAllExprs() []backend.CommonExpression
+	Get(id int) (backend.CommonExpression, bool)
+	GetReadyExpr() (expr backend.CommonExpression)
+}
+
+type ExpressionsList struct {
+	mut   sync.Mutex
+	exprs map[int]*backend.Expression
+}
+
+func (e *ExpressionsList) AddExprFabric(postfix []string) (newExpr backend.CommonExpression, newId int) {
+	newId = e.generateId()
+	newTaskSpace := backend.CallTasksHandlerFabric()
+	newExpr = backend.CallExpressionFabric(postfix, newId, backend.Ready, newTaskSpace)
+	newExpr.DivideIntoTasks()
+	e.mut.Lock()
+	e.exprs[newId] = newExpr.(*backend.Expression)
+	e.mut.Unlock()
+	return
+}
+
+func (e *ExpressionsList) generateId() (id int) {
+	e.mut.Lock()
+	defer e.mut.Unlock()
+	return len(e.exprs)
+}
+
+// GetAllExprs выдаёт значения в рандомном порядке.
+func (e *ExpressionsList) GetAllExprs() []backend.CommonExpression {
+	e.mut.Lock()
+	defer e.mut.Unlock()
+	var (
+		stop          func()
+		v             *backend.Expression
+		next          func() (*backend.Expression, bool)
+		thereAreElems = true
+		seq           iter.Seq[*backend.Expression]
+		result        = make([]backend.CommonExpression, 0)
+	)
+	seq = maps.Values(e.exprs)
+	next, stop = iter.Pull[*backend.Expression](seq)
+	defer stop()
+	for {
+		v, thereAreElems = next()
+		if thereAreElems != false {
+			result = append(result, v)
+		} else {
+			break
+		}
+	}
+	return result
+}
+
+func (e *ExpressionsList) Get(id int) (backend.CommonExpression, bool) {
+	e.mut.Lock()
+	var result, ok = e.exprs[id]
+	e.mut.Unlock()
+	return result, ok
+}
+
+func (e *ExpressionsList) GetReadyExpr() (expr backend.CommonExpression) {
+	e.mut.Lock()
+	defer e.mut.Unlock()
+	for _, v := range e.exprs {
+		if v.GetStatus() == backend.Ready {
+			return v
+		}
+	}
+	return nil
+}
+
+func CallEmptyExpressionListFabric() *ExpressionsList {
+	return &ExpressionsList{
+		mut:   sync.Mutex{},
+		exprs: make(map[int]*backend.Expression),
+	}
 }
