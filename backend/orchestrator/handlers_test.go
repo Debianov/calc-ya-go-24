@@ -226,7 +226,7 @@ func testCalcHandlerGet(t *testing.T) {
 		expectedResponses = []*backend.EmptyJson{{}}
 		commonHttpCase    = backend.HttpCasesHandler[backend.RequestJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/calculate",
-			ExpectedHttpCode: http.StatusOK}
+			ExpectedHttpCode: http.StatusNotFound}
 	)
 	testThroughHttpHandler(calcHandler, t, commonHttpCase, defaultCmpFunc)
 }
@@ -270,7 +270,7 @@ func testExpressionsHandlerPost(t *testing.T) {
 		expectedResponses = []*backend.EmptyJson{{}}
 		commonHttpCase    = backend.HttpCasesHandler[backend.EmptyJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/expressions",
-			ExpectedHttpCode: http.StatusOK}
+			ExpectedHttpCode: http.StatusNotFound}
 	)
 	testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
 }
@@ -351,7 +351,7 @@ func testExpressionIdHandlerPost(t *testing.T) {
 		serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[backend.EmptyJson, *backend.EmptyJson]{
 			RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "POST",
 			UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
-			ExpectedHttpCode: http.StatusOK}
+			ExpectedHttpCode: http.StatusNotFound}
 	)
 	testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
 }

@@ -24,9 +24,11 @@ var (
 
 func registerHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	if r.Header.Get("Content-Type") != "application/json" {
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	var (
@@ -61,9 +63,11 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	if r.Header.Get("Content-Type") != "application/json" {
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	var (
@@ -115,9 +119,11 @@ func calcHandler(w http.ResponseWriter, r *http.Request) {
 		err error
 	)
 	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	if r.Header.Get("Content-Type") != "application/json" {
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	var (
@@ -153,6 +159,7 @@ func calcHandler(w http.ResponseWriter, r *http.Request) {
 
 func expressionsHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	var err error
@@ -177,6 +184,7 @@ func expressionsHandler(w http.ResponseWriter, r *http.Request) {
 
 func expressionIdHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	var err error
