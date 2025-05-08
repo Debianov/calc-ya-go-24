@@ -12,7 +12,27 @@ type ExpressionsListStub struct {
 	cursor int
 }
 
-func (s *ExpressionsListStub) AddExprFabric(postfix []string) (newExpr backend.CommonExpression, newId int) {
+func (s *ExpressionsListStub) AddExprFabric(fromUserId int64, postfix []string) (newExpr backend.CommonExpression, newExprId int) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *ExpressionsListStub) GetAll() []backend.CommonExpression {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *ExpressionsListStub) GetOwned(userOwnerId int64, exprId int) (backend.CommonExpression, bool) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *ExpressionsListStub) GetAllOwned(userOwnerId int64) []backend.CommonExpression {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *ExpressionsListStub) Remove(expr backend.CommonExpression) {
 	//TODO implement me
 	panic("implement me")
 }
@@ -48,7 +68,7 @@ func (s *ExpressionsListStub) GetReadyExpr() (result backend.CommonExpression) {
 
 /*
 callExprsListStubFabric формирует новый ExpressionsListStub, который может быть присвоен глобальной
-переменной exprsList для подмены настоящего списка в целях тестирования, или использоваться как-то ещё.
+переменной exprsList для подмены настоящего списка в целях тестирования.
 */
 func callExprsListStubFabric(expressions ...backend.ExpressionStub) (result *ExpressionsListStub) {
 	if len(expressions) == 0 {
@@ -64,6 +84,11 @@ type DbStub struct {
 	users  map[string]UserWithHashedPassword
 }
 
+func (s *DbStub) InsertExpr(expr backend.CommonExpression) (err error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (s *DbStub) InsertUser(user UserWithHashedPassword) (lastId int64, err error) {
 	s.users[user.GetLogin()] = user
 	lastId++
@@ -77,6 +102,16 @@ func (s *DbStub) SelectUser(login string) (user UserWithHashedPassword, err erro
 		return
 	}
 	return v, nil
+}
+
+func (s *DbStub) SelectAllExprs(userOwnerId int64) (exprs []backend.ShortExpression, err error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *DbStub) SelectExpr(userOwnerId int64, exprId int) (expr backend.ShortExpression, err error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (s *DbStub) Flush() (err error) {
@@ -170,14 +205,22 @@ type parsedToken interface {
 	GetExpectedUser() CommonUser
 }
 
-type jwtTokenStub struct {
+type userForJwtToken struct {
 	ExpectedUser CommonUser
 }
 
-func (j *jwtTokenStub) Marshal() (result []byte, err error) {
+func (j *userForJwtToken) Marshal() (result []byte, err error) {
 	return json.Marshal(j)
 }
 
-func (j *jwtTokenStub) GetExpectedUser() CommonUser {
+func (j *userForJwtToken) GetExpectedUser() CommonUser {
 	return j.ExpectedUser
+}
+
+type JwtTokenJsonWrapperStub struct {
+	Token string `json:"token"`
+}
+
+func (j *JwtTokenJsonWrapperStub) Marshal() (result []byte, err error) {
+	return json.Marshal(j)
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Debianov/calc-ya-go-24/backend/orchestrator"
 	"time"
 )
 
@@ -155,4 +156,13 @@ type ExpressionJsonTitleStub struct {
 func (e *ExpressionJsonTitleStub) Marshal() (result []byte, err error) {
 	result, err = json.Marshal(e)
 	return
+}
+
+type RequestJsonStub struct {
+	Token      string `json:"token"`
+	Expression string `json:"expression"`
+}
+
+func (r *RequestJsonStub) Marshal() (result []byte, err error) {
+	return json.Marshal(r)
 }

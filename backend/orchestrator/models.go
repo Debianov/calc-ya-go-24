@@ -5,6 +5,7 @@ import (
 	"github.com/Debianov/calc-ya-go-24/backend"
 	"iter"
 	"maps"
+	"slices"
 	"sync"
 )
 
@@ -138,24 +139,38 @@ func (j *JwtTokenJsonWrapper) Marshal() (result []byte, err error) {
 }
 
 type CommonExpressionsList interface {
-	AddExprFabric(postfix []string) (newExpr backend.CommonExpression, newId int)
-	GetAllExprs() []backend.CommonExpression
-	Get(id int) (backend.CommonExpression, bool)
+	AddExprFabric(fromUserId int64, postfix []string) (newExpr backend.CommonExpression, newExprId int)
+	Get(exprId int) (backend.CommonExpression, bool)
+	GetAll() []backend.CommonExpression
+	GetOwned(userOwnerId int64, exprId int) (backend.CommonExpression, bool)
+	GetAllOwned(userOwnerId int64) []backend.CommonExpression
 	GetReadyExpr() (expr backend.CommonExpression)
+	Remove(expr backend.CommonExpression)
 }
 
 type ExpressionsList struct {
-	mut   sync.Mutex
+	mut sync.Mutex
+	/*
+		Хранит только выполняющиеся выражения. Все посчитанные выражения отправляются в БД.
+	*/
 	exprs map[int]*backend.Expression
+	/*
+		usersMap отображает соответствия "пользователь - выражения". Хранит только
+		выполняющиеся выражения. Все посчитанные выражения отправляются в БД.
+	*/
+	usersMap map[int64][]*backend.Expression
 }
 
-func (e *ExpressionsList) AddExprFabric(postfix []string) (newExpr backend.CommonExpression, newId int) {
-	newId = e.generateId()
+func (e *ExpressionsList) AddExprFabric(fromUserId int64, postfix []string) (newExpr backend.CommonExpression,
+	newExprId int) {
+	newExprId = e.generateId()
 	newTaskSpace := backend.CallTasksHandlerFabric()
-	newExpr = backend.CallExpressionFabric(postfix, newId, backend.Ready, newTaskSpace)
+	newExpr = backend.CallExpressionFabric(postfix, newExprId, backend.Ready, newTaskSpace)
 	newExpr.DivideIntoTasks()
+	toAdd := newExpr.(*backend.Expression)
 	e.mut.Lock()
-	e.exprs[newId] = newExpr.(*backend.Expression)
+	e.exprs[newExprId] = toAdd
+	e.usersMap[fromUserId] = append(e.usersMap[fromUserId], toAdd)
 	e.mut.Unlock()
 	return
 }
@@ -166,8 +181,21 @@ func (e *ExpressionsList) generateId() (id int) {
 	return len(e.exprs)
 }
 
-// GetAllExprs выдаёт значения в рандомном порядке.
-func (e *ExpressionsList) GetAllExprs() []backend.CommonExpression {
+/*
+Get возвращает конкретное выражение по его id.
+*/
+func (e *ExpressionsList) Get(exprId int) (backend.CommonExpression, bool) {
+	e.mut.Lock()
+	defer e.mut.Unlock()
+	var result, ok = e.exprs[exprId]
+	return result, ok
+}
+
+/*
+GetAll возвращает все выражения, хранящиеся в списке в рандомном порядке и без сортировки
+по пользователям.
+*/
+func (e *ExpressionsList) GetAll() []backend.CommonExpression {
 	e.mut.Lock()
 	defer e.mut.Unlock()
 	var (
@@ -192,11 +220,34 @@ func (e *ExpressionsList) GetAllExprs() []backend.CommonExpression {
 	return result
 }
 
-func (e *ExpressionsList) Get(id int) (backend.CommonExpression, bool) {
+/*
+GetOwned возвращает конкретное значение и проверяет его принадлежность.
+*/
+func (e *ExpressionsList) GetOwned(userOwnerId int64, exprId int) (result backend.CommonExpression, ok bool) {
 	e.mut.Lock()
-	var result, ok = e.exprs[id]
-	e.mut.Unlock()
-	return result, ok
+	defer e.mut.Unlock()
+	var exprFromList *backend.Expression
+	exprFromList, ok = e.exprs[exprId]
+	if ok && slices.Contains(e.usersMap[userOwnerId], exprFromList) {
+		result = exprFromList
+		return
+	} else {
+		ok = false
+		result = nil
+		return
+	}
+}
+
+/*
+GetAllOwned выдаёт значения в рандомном порядке все выражения, которые созданы пользователем с конкретным id.
+*/
+func (e *ExpressionsList) GetAllOwned(userOwnerId int64) (result []backend.CommonExpression) {
+	e.mut.Lock()
+	defer e.mut.Unlock()
+	for _, expr := range e.usersMap[userOwnerId] {
+		result = append(result, expr)
+	}
+	return
 }
 
 func (e *ExpressionsList) GetReadyExpr() (expr backend.CommonExpression) {
@@ -210,9 +261,26 @@ func (e *ExpressionsList) GetReadyExpr() (expr backend.CommonExpression) {
 	return nil
 }
 
+func (e *ExpressionsList) Remove(expr backend.CommonExpression) {
+	e.mut.Lock()
+	defer e.mut.Unlock()
+	delete(e.usersMap, expr.GetOwnerId())
+	delete(e.exprs, expr.GetId())
+}
+
 func CallEmptyExpressionListFabric() *ExpressionsList {
 	return &ExpressionsList{
 		mut:   sync.Mutex{},
 		exprs: make(map[int]*backend.Expression),
 	}
+}
+
+type RequestJson struct {
+	JwtTokenJsonWrapper
+	Expression string `json:"expression"`
+}
+
+func (r RequestJson) Marshal() (result []byte, err error) {
+	result, err = json.Marshal(&r)
+	return
 }

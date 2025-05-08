@@ -352,15 +352,6 @@ type JsonPayload interface {
 	Marshal() (result []byte, err error)
 }
 
-type RequestJson struct {
-	Expression string `json:"expression"`
-}
-
-func (r RequestJson) Marshal() (result []byte, err error) {
-	result, err = json.Marshal(&r)
-	return
-}
-
 type EmptyJson struct {
 }
 
@@ -377,14 +368,23 @@ const (
 	Cancelled               = "Отменено"
 )
 
-type CommonExpression interface {
+/*
+ShortExpression -- урезанная версия Expression для возврата информации о выражении, не включая
+в этот вывод Task-и. Содержит только методы доступа к полям.
+*/
+type ShortExpression interface {
+	JsonPayload
 	GetId() int
 	GetStatus() ExprStatus
-	GetReadyGrpcTask() (GrpcTask, error)
 	GetResult() int64
+	GetOwnerId() int64
+}
+
+type CommonExpression interface {
+	ShortExpression
+	GetReadyGrpcTask() (GrpcTask, error)
 	GetTasksHandler() CommonTasksHandler
 	UpdateTask(result GrpcResult, timeAt time.Time) (err error)
-	JsonPayload
 	MarshalId() (result []byte, err error)
 	DivideIntoTasks()
 }
@@ -393,6 +393,7 @@ type Expression struct {
 	Id           int          `json:"id"`
 	Status       atomic.Value `json:"status"`
 	Result       atomic.Int64 `json:"result"`
+	userOwnerId  int64
 	postfix      []string
 	tasksHandler *TasksHandler
 }
@@ -431,13 +432,17 @@ func (e *Expression) GetResult() int64 {
 	return e.Result.Load()
 }
 
+func (e *Expression) GetOwnerId() int64 {
+	return e.userOwnerId
+}
+
 func (e *Expression) GetReadyGrpcTask() (result GrpcTask, err error) {
 	maybeReadyTask := e.tasksHandler.RegisterFirst()
 	if maybeReadyTask.IsReadyToCalc() {
 		if e.tasksHandler.Len() == 1 {
-			e.updateStatus(NoReadyTasks)
+			e.setStatus(NoReadyTasks)
 		} else {
-			e.updateStatus(Ready)
+			e.setStatus(Ready)
 		}
 		taskWithTime := e.tasksHandler.sentTasks.WrapWithTime(maybeReadyTask, time.Now())
 		taskWithTime.SetStatus(Sent)
@@ -458,14 +463,14 @@ func (e *Expression) UpdateTask(result GrpcResult, timeAtReceiveTask time.Time) 
 		return &TaskIDNotExist{int(result.GetPairId())}
 	}
 	if factTime := timeAtReceiveTask.Sub(timeAtSendingTask); factTime > task.GetPermissibleDuration() {
-		e.updateStatus(Cancelled)
+		e.setStatus(Cancelled)
 		return &TimeoutExecution{task.GetPermissibleDuration(), factTime, task.GetOperation(),
 			task.GetPairId()}
 	}
 	task.SetResult(result.GetResult())
 	e.tasksHandler.CountUpdatedTask()
 	if e.tasksHandler.Len() == 1 {
-		e.updateStatus(Completed)
+		e.setStatus(Completed)
 		e.setResult(task.GetResult())
 	}
 	return
@@ -531,8 +536,8 @@ func (e *Expression) getPermissibleTime(currentOperator string) (result time.Dur
 	return
 }
 
-// updateStatus потокобезопасен
-func (e *Expression) updateStatus(status ExprStatus) bool {
+// setStatus потокобезопасен
+func (e *Expression) setStatus(status ExprStatus) bool {
 	return e.Status.CompareAndSwap(e.Status.Load(), status)
 }
 
@@ -542,26 +547,34 @@ func (e *Expression) setResult(result int64) bool {
 }
 
 type ExpressionsJsonTitle struct {
-	Expressions []CommonExpression `json:"expressions"`
+	Expressions []ShortExpression `json:"expressions"`
 }
 
 func (e *ExpressionsJsonTitle) Marshal() (result []byte, err error) {
-	result, err = json.Marshal(&e)
+	result, err = json.Marshal(e)
 	return
 }
 
 type ExpressionJsonTitle struct {
-	Expression CommonExpression `json:"expression"`
+	Expression ShortExpression `json:"expression"`
 }
 
 func (e *ExpressionJsonTitle) Marshal() (result []byte, err error) {
-	result, err = json.Marshal(&e)
+	result, err = json.Marshal(e)
 	return
 }
 
-func CallExpressionFabric(postfix []string, Id int, status ExprStatus, tasksHandler *TasksHandler) (newInstance *Expression) {
-	newInstance = &Expression{postfix: postfix, Id: Id, tasksHandler: tasksHandler}
+func CallExpressionFabric(postfix []string, id int, status ExprStatus, tasksHandler *TasksHandler) (newInstance *Expression) {
+	newInstance = &Expression{postfix: postfix, Id: id, tasksHandler: tasksHandler}
 	newInstance.Status.Swap(status)
+	return
+}
+
+func CallShortExpressionFabric(exprId int, ownerId int64, status ExprStatus, result int64) (newInstance *Expression) {
+	newInstance = &Expression{Id: exprId}
+	newInstance.userOwnerId = ownerId
+	newInstance.setStatus(status)
+	newInstance.setResult(result)
 	return
 }
 

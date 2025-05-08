@@ -128,8 +128,9 @@ func calcHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	var (
 		buf           []byte
-		requestStruct backend.RequestJson
+		requestStruct RequestJson
 		reader        io.ReadCloser
+		user          CommonUser
 	)
 	reader = r.Body
 	buf, err = io.ReadAll(reader)
@@ -140,21 +141,46 @@ func calcHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Panic(err)
 	}
-	postfix, ok := pkg.GeneratePostfix(requestStruct.Expression)
-	if !ok {
-		w.WriteHeader(422)
+	user, err = ParseJwt(requestStruct.Token)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	expr, _ := exprsList.AddExprFabric(postfix)
-	marshaledExpr, err := expr.MarshalId()
+	postfix, ok := pkg.GeneratePostfix(requestStruct.Expression)
+	if !ok {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		return
+	}
+	expr, _ := exprsList.AddExprFabric(user.GetId(), postfix)
+	exprIdInJson, err := expr.MarshalId()
 	if err != nil {
 		log.Panic(err)
 	}
-	w.WriteHeader(201)
-	_, err = w.Write(marshaledExpr)
+	w.WriteHeader(http.StatusCreated)
+	_, err = w.Write(exprIdInJson)
 	if err != nil {
 		log.Panic(err)
 	}
+}
+
+func parseToken(r *http.Request) (user CommonUser, err error) {
+	var (
+		tokenBuf []byte
+		jwtToken JwtTokenJsonWrapper
+	)
+	tokenBuf, err = io.ReadAll(r.Body)
+	if err != nil {
+		return
+	}
+	err = json.Unmarshal(tokenBuf, &jwtToken)
+	if err != nil {
+		return
+	}
+	user, err = ParseJwt(jwtToken.Token)
+	if err != nil {
+		return
+	}
+	return
 }
 
 func expressionsHandler(w http.ResponseWriter, r *http.Request) {
@@ -162,9 +188,30 @@ func expressionsHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	var err error
-	exprs := exprsList.GetAllExprs()
-	slices.SortFunc(exprs, func(expression backend.CommonExpression, expression2 backend.CommonExpression) int {
+	var (
+		err  error
+		user CommonUser
+	)
+	user, err = parseToken(r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	var (
+		exprs         []backend.ShortExpression
+		exprsFromDb   []backend.ShortExpression
+		exprsFromList []backend.CommonExpression
+	)
+	exprsFromList = exprsList.GetAllOwned(user.GetId())
+	for _, expr := range exprsFromList {
+		exprs = append(exprs, expr)
+	}
+	exprsFromDb, err = db.SelectAllExprs(user.GetId())
+	if err != nil {
+		log.Panic(err)
+	}
+	exprs = append(exprs, exprsFromDb...)
+	slices.SortFunc(exprs, func(expression backend.ShortExpression, expression2 backend.ShortExpression) int {
 		if expression.GetId() >= expression2.GetId() {
 			return 0
 		} else {
@@ -187,16 +234,28 @@ func expressionIdHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	var err error
+	var (
+		err   error
+		user  CommonUser
+		expr  backend.ShortExpression
+		exist bool
+	)
+	user, err = parseToken(r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 	id := r.PathValue("id")
-	idInINt, err := strconv.ParseInt(id, 10, 64)
+	idInInt, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		log.Panic(err)
 	}
-	expr, exist := exprsList.Get(int(idInINt))
-	if !exist {
-		w.WriteHeader(404)
-		return
+	expr, err = db.SelectExpr(user.GetId(), int(idInInt))
+	if err != nil {
+		if expr, exist = exprsList.GetOwned(user.GetId(), int(idInInt)); !exist {
+			w.WriteHeader(404)
+			return
+		}
 	}
 	var exprJsonHandler = backend.ExpressionJsonTitle{Expression: expr}
 	exprHandlerInBytes, err := json.Marshal(&exprJsonHandler)
@@ -268,6 +327,12 @@ func (g *GrpcTaskServer) SendTask(_ context.Context, req *pb.TaskResult) (_ *pb.
 	err = expr.UpdateTask(req, timeAtReceiveTask)
 	if err != nil {
 		return nil, status.Errorf(codes.Aborted, "%s", err)
+	}
+	if expr.GetStatus() == backend.Completed {
+		if err = db.InsertExpr(expr); err != nil {
+			return nil, status.Errorf(codes.Aborted, "%s", err)
+		}
+		exprsList.Remove(expr)
 	}
 	return &pb.Empty{}, status.Error(codes.OK, "")
 }
