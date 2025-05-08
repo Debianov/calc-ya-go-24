@@ -147,8 +147,6 @@ func CallTestDbWithUserFabric() (instanceToReturn *Db) {
 		return nil
 	}
 	instanceToReturn = &Db{ctx: ctx, innerDb: innerDb}
-
-	instanceToReturn.InsertUser()
 	return
 }
 
@@ -161,10 +159,11 @@ func createBaseTables(ctx context.Context, db *sql.DB) (err error) {
 	);
 	CREATE TABLE IF NOT EXISTS exprs(
 	    exprId INTEGER PRIMARY KEY,
-	    FOREIGN KEY (ownerId) REFERENCES users (id),
+	    ownerId INTEGER,
 	    status INTEGER,
-		_result INTEGER
-	)
+		_result INTEGER,
+		FOREIGN KEY (ownerId) REFERENCES users (id)
+	);
 	`
 	if _, err = db.ExecContext(ctx, usersTable); err != nil {
 		return err

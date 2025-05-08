@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Debianov/calc-ya-go-24/backend/orchestrator"
 	"time"
 )
 
@@ -33,6 +32,10 @@ func (s *ExpressionStub) GetStatus() ExprStatus {
 }
 
 func (s *ExpressionStub) GetResult() int64 {
+	panic("implement me")
+}
+
+func (s *ExpressionStub) GetOwnerId() int64 {
 	panic("implement me")
 }
 

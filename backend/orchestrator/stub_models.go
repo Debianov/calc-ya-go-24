@@ -3,13 +3,15 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/Debianov/calc-ya-go-24/backend"
 	"log"
 )
 
 type ExpressionsListStub struct {
-	buf    []backend.ExpressionStub
-	cursor int
+	buf        []*backend.ExpressionStub
+	exprOwners map[int64][]*backend.ExpressionStub
+	cursor     int
 }
 
 func (s *ExpressionsListStub) AddExprFabric(fromUserId int64, postfix []string) (newExpr backend.CommonExpression, newExprId int) {
@@ -23,13 +25,21 @@ func (s *ExpressionsListStub) GetAll() []backend.CommonExpression {
 }
 
 func (s *ExpressionsListStub) GetOwned(userOwnerId int64, exprId int) (backend.CommonExpression, bool) {
-	//TODO implement me
-	panic("implement me")
+	userExprs := s.exprOwners[userOwnerId]
+	for _, expr := range userExprs {
+		if expr.GetId() == exprId {
+			return expr, true
+		}
+	}
+	return nil, false
 }
 
-func (s *ExpressionsListStub) GetAllOwned(userOwnerId int64) []backend.CommonExpression {
-	//TODO implement me
-	panic("implement me")
+func (s *ExpressionsListStub) GetAllOwned(userOwnerId int64) (result []backend.CommonExpression) {
+	elems := s.exprOwners[userOwnerId]
+	for _, v := range elems {
+		result = append(result, v)
+	}
+	return
 }
 
 func (s *ExpressionsListStub) Remove(expr backend.CommonExpression) {
@@ -39,7 +49,7 @@ func (s *ExpressionsListStub) Remove(expr backend.CommonExpression) {
 
 func (s *ExpressionsListStub) GetAllExprs() (result []backend.CommonExpression) {
 	for _, expr := range s.buf {
-		result = append(result, backend.CommonExpression(&expr))
+		result = append(result, expr)
 	}
 	return
 }
@@ -48,7 +58,7 @@ func (s *ExpressionsListStub) GetAllExprs() (result []backend.CommonExpression) 
 func (s *ExpressionsListStub) Get(id int) (result backend.CommonExpression, ok bool) {
 	if id < len(s.buf) {
 		ok = true
-		result = backend.CommonExpression(&s.buf[id])
+		result = backend.CommonExpression(s.buf[id])
 	} else {
 		ok = false
 	}
@@ -56,10 +66,10 @@ func (s *ExpressionsListStub) Get(id int) (result backend.CommonExpression, ok b
 }
 
 func (s *ExpressionsListStub) GetReadyExpr() (result backend.CommonExpression) {
-	var expr backend.ExpressionStub
+	var expr *backend.ExpressionStub
 	for _, expr = range s.buf {
 		if expr.GetStatus() == backend.Ready {
-			result = &expr
+			result = expr
 			return
 		}
 	}
@@ -69,19 +79,26 @@ func (s *ExpressionsListStub) GetReadyExpr() (result backend.CommonExpression) {
 /*
 callExprsListStubFabric формирует новый ExpressionsListStub, который может быть присвоен глобальной
 переменной exprsList для подмены настоящего списка в целях тестирования.
+Образует список с новым инициатором (ownerId), которому принадлежат expressions.
 */
-func callExprsListStubFabric(expressions ...backend.ExpressionStub) (result *ExpressionsListStub) {
-	if len(expressions) == 0 {
-		result = &ExpressionsListStub{}
-	} else {
-		result = &ExpressionsListStub{buf: expressions}
+func callExprsListStubFabric(ownerId int64, expressions ...backend.ExpressionStub) (result *ExpressionsListStub) {
+	newExprsArray := make([]*backend.ExpressionStub, 0)
+	for _, expr := range expressions {
+		newExprsArray = append(newExprsArray, &expr)
 	}
+	result = &ExpressionsListStub{buf: newExprsArray,
+		exprOwners: map[int64][]*backend.ExpressionStub{ownerId: newExprsArray}}
 	return
+}
+
+func callExprsEmptyListFabric() (result *ExpressionsListStub) {
+	return &ExpressionsListStub{buf: make([]*backend.ExpressionStub, 0), exprOwners: make(map[int64][]*backend.ExpressionStub)}
 }
 
 type DbStub struct {
 	lastId int64
 	users  map[string]UserWithHashedPassword
+	exprs  map[int64][]backend.ExpressionStub
 }
 
 func (s *DbStub) InsertExpr(expr backend.CommonExpression) (err error) {
@@ -105,17 +122,35 @@ func (s *DbStub) SelectUser(login string) (user UserWithHashedPassword, err erro
 }
 
 func (s *DbStub) SelectAllExprs(userOwnerId int64) (exprs []backend.ShortExpression, err error) {
-	//TODO implement me
-	panic("implement me")
+	fromExprs := s.exprs[userOwnerId]
+	for _, v := range fromExprs {
+		exprs = append(exprs, &v)
+	}
+	return
 }
 
 func (s *DbStub) SelectExpr(userOwnerId int64, exprId int) (expr backend.ShortExpression, err error) {
-	//TODO implement me
-	panic("implement me")
+	userExprs := s.exprs[userOwnerId]
+	for _, expr := range userExprs {
+		if expr.GetId() == exprId {
+			return &expr, nil
+		}
+	}
+	return nil, fmt.Errorf("выражение ID %d у %d не найдено", exprId, userOwnerId)
 }
 
 func (s *DbStub) Flush() (err error) {
 	s.users = make(map[string]UserWithHashedPassword)
+	s.exprs = make(map[int64][]backend.ExpressionStub)
+	return
+}
+
+func (s *DbStub) InsertExprs(ownerId int64, exprs []backend.ExpressionStub) {
+	s.exprs[ownerId] = exprs
+}
+
+func (s *DbStub) FlushExprs() (err error) {
+	s.exprs = make(map[int64][]backend.ExpressionStub)
 	return
 }
 
@@ -124,12 +159,13 @@ func (s *DbStub) Close() (err error) {
 }
 
 func callStubDbFabric() *DbStub {
-	return &DbStub{users: make(map[string]UserWithHashedPassword)}
+	return &DbStub{users: make(map[string]UserWithHashedPassword), exprs: make(map[int64][]backend.ExpressionStub)}
 }
 
 func callStubDbWithRegisteredUserFabric(users ...UserStub) *DbStub {
 	var (
 		usersToStub = make(map[string]UserWithHashedPassword)
+		exprs       = make(map[int64][]backend.ExpressionStub)
 		err         error
 	)
 	for _, user := range users {
@@ -139,7 +175,7 @@ func callStubDbWithRegisteredUserFabric(users ...UserStub) *DbStub {
 		}
 		usersToStub[user.GetLogin()] = &user
 	}
-	return &DbStub{users: usersToStub}
+	return &DbStub{users: usersToStub, exprs: exprs}
 }
 
 type UserStub struct {

@@ -151,14 +151,14 @@ type CommonExpressionsList interface {
 type ExpressionsList struct {
 	mut sync.Mutex
 	/*
-		Хранит только выполняющиеся выражения. Все посчитанные выражения отправляются в БД.
+		exprs хранит только выполняющиеся выражения. Все посчитанные выражения отправляются в БД.
 	*/
 	exprs map[int]*backend.Expression
 	/*
-		usersMap отображает соответствия "пользователь - выражения". Хранит только
+		exprsOwners отображает соответствия "пользователь - выражения". Хранит только
 		выполняющиеся выражения. Все посчитанные выражения отправляются в БД.
 	*/
-	usersMap map[int64][]*backend.Expression
+	exprsOwners map[int64][]*backend.Expression
 }
 
 func (e *ExpressionsList) AddExprFabric(fromUserId int64, postfix []string) (newExpr backend.CommonExpression,
@@ -170,7 +170,7 @@ func (e *ExpressionsList) AddExprFabric(fromUserId int64, postfix []string) (new
 	toAdd := newExpr.(*backend.Expression)
 	e.mut.Lock()
 	e.exprs[newExprId] = toAdd
-	e.usersMap[fromUserId] = append(e.usersMap[fromUserId], toAdd)
+	e.exprsOwners[fromUserId] = append(e.exprsOwners[fromUserId], toAdd)
 	e.mut.Unlock()
 	return
 }
@@ -228,7 +228,7 @@ func (e *ExpressionsList) GetOwned(userOwnerId int64, exprId int) (result backen
 	defer e.mut.Unlock()
 	var exprFromList *backend.Expression
 	exprFromList, ok = e.exprs[exprId]
-	if ok && slices.Contains(e.usersMap[userOwnerId], exprFromList) {
+	if ok && slices.Contains(e.exprsOwners[userOwnerId], exprFromList) {
 		result = exprFromList
 		return
 	} else {
@@ -244,7 +244,7 @@ GetAllOwned выдаёт значения в рандомном порядке �
 func (e *ExpressionsList) GetAllOwned(userOwnerId int64) (result []backend.CommonExpression) {
 	e.mut.Lock()
 	defer e.mut.Unlock()
-	for _, expr := range e.usersMap[userOwnerId] {
+	for _, expr := range e.exprsOwners[userOwnerId] {
 		result = append(result, expr)
 	}
 	return
@@ -264,14 +264,15 @@ func (e *ExpressionsList) GetReadyExpr() (expr backend.CommonExpression) {
 func (e *ExpressionsList) Remove(expr backend.CommonExpression) {
 	e.mut.Lock()
 	defer e.mut.Unlock()
-	delete(e.usersMap, expr.GetOwnerId())
+	delete(e.exprsOwners, expr.GetOwnerId())
 	delete(e.exprs, expr.GetId())
 }
 
 func CallEmptyExpressionListFabric() *ExpressionsList {
 	return &ExpressionsList{
-		mut:   sync.Mutex{},
-		exprs: make(map[int]*backend.Expression),
+		mut:         sync.Mutex{},
+		exprs:       make(map[int]*backend.Expression),
+		exprsOwners: make(map[int64][]*backend.Expression),
 	}
 }
 

@@ -1,5 +1,3 @@
-// Тестирование случаев, предусмотренных ТЗ.
-
 package main
 
 import (
@@ -7,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/Debianov/calc-ya-go-24/backend"
 	pb "github.com/Debianov/calc-ya-go-24/backend/proto"
 	"github.com/stretchr/testify/assert"
@@ -16,7 +13,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strconv"
 	"testing"
 )
@@ -29,7 +25,7 @@ testThroughHttpHandler запускает все тесты через handler, 
 */
 func testThroughHttpHandler[K, V backend.JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
 	casesHandler backend.HttpCasesHandler[K, V], compareFunc func(t *testing.T, w *httptest.ResponseRecorder,
-	casesHandler backend.CasesHandler, currentTestCase backend.ByteCase)) {
+		casesHandler backend.CasesHandler, currentTestCase backend.ByteCase)) {
 	var (
 		cases []backend.ByteCase
 		err   error
@@ -59,7 +55,7 @@ testThroughServeMux работает также, как и testThroughHttpHandle
 func testThroughServeMux[K, V backend.JsonPayload](
 	handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
 	casesHandler backend.ServerMuxHttpCasesHandler[K, V], compareFunc func(t *testing.T, w *httptest.ResponseRecorder,
-	casesHandler backend.CasesHandler, currentTestCase backend.ByteCase)) {
+		casesHandler backend.CasesHandler, currentTestCase backend.ByteCase)) {
 	var (
 		cases []backend.ByteCase
 		err   error
@@ -207,8 +203,9 @@ func testExpressionsHandler200(t *testing.T) {
 	})
 	db = callStubDbWithRegisteredUserFabric(testUser)
 
-	t.Run("WithDb", func(t *testing.T) {
+	t.Run("FromDbAndExprsList", func(t *testing.T) {
 		t.Cleanup(func() {
+			exprsList = CallEmptyExpressionListFabric()
 			db.(*DbStub).FlushExprs()
 		})
 		var (
@@ -219,7 +216,7 @@ func testExpressionsHandler200(t *testing.T) {
 			expectedExpressions []backend.ExpressionStub
 		)
 		db.(*DbStub).InsertExprs(testUser.GetId(), expectedExpressionsFromDb)
-		exprsList = callExprsListStubFabric(expectedExpressionsFromList...)
+		exprsList = callExprsListStubFabric(testUser.GetId(), expectedExpressionsFromList...)
 		expectedExpressions = append(expectedExpressions, expectedExpressionsFromList...)
 		expectedExpressions = append(expectedExpressions, expectedExpressionsFromDb...)
 		var (
@@ -231,13 +228,13 @@ func testExpressionsHandler200(t *testing.T) {
 		)
 		testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
 	})
-	t.Run("WithoutDb", func(t *testing.T) {
+	t.Run("FromExprsList", func(t *testing.T) {
 		var (
 			expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0},
 				{Id: 1, Status: backend.Completed, Result: 432}, {Id: 2, Status: backend.Cancelled, Result: 0},
 				{Id: 3, Status: backend.NoReadyTasks, Result: 0}, {Id: 4, Status: backend.Completed, Result: -2345}}
 		)
-		exprsList = callExprsListStubFabric(expectedExpressions...)
+		exprsList = callExprsListStubFabric(testUser.GetId(), expectedExpressions...)
 		var (
 			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
 			expectedResponses = []*backend.ExpressionsJsonTitleStub{{expectedExpressions}}
@@ -247,126 +244,151 @@ func testExpressionsHandler200(t *testing.T) {
 		)
 		testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
 	})
-	//t.Run("OnlyDb")
-}
-
-func testExpressionsHandlerPost(t *testing.T) {
-	t.Cleanup(func() {
-		exprsList = CallEmptyExpressionListFabric()
+	t.Run("FromDb", func(t *testing.T) {
+		t.Cleanup(func() {
+			db.(*DbStub).FlushExprs()
+		})
+		var (
+			expectedExpressions = []backend.ExpressionStub{{Id: 1, Status: backend.Completed, Result: 432},
+				{Id: 4, Status: backend.Completed, Result: -2345}}
+		)
+		db.(*DbStub).InsertExprs(testUser.GetId(), expectedExpressions)
+		var (
+			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
+			expectedResponses = []*backend.ExpressionsJsonTitleStub{{expectedExpressions}}
+			commonHttpCase    = backend.HttpCasesHandler[*JwtTokenJsonWrapperStub, *backend.ExpressionsJsonTitleStub]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
+				UrlTarget: "/api/v1/expressions", ExpectedHttpCode: http.StatusOK}
+		)
+		testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
 	})
-	var (
-		expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
-	)
-	exprsList = callExprsListStubFabric(expectedExpressions...)
-	var (
-		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*backend.EmptyJson{{}}
-		commonHttpCase    = backend.HttpCasesHandler[backend.EmptyJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
-			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/expressions",
-			ExpectedHttpCode: http.StatusNotFound}
-	)
-	testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
+	t.Run("EmptyStorages", func(t *testing.T) {
+		var (
+			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
+			expectedResponses = []*backend.ExpressionsJsonTitle{{Expressions: make([]backend.ShortExpression, 0)}}
+			commonHttpCase    = backend.HttpCasesHandler[*JwtTokenJsonWrapperStub, *backend.ExpressionsJsonTitle]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
+				UrlTarget: "/api/v1/expressions", ExpectedHttpCode: http.StatusOK}
+		)
+		testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
+	})
 }
 
-func testExpressionsHandlerEmpty(t *testing.T) {
-	exprsList = CallEmptyExpressionListFabric()
-	var (
-		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*backend.ExpressionsJsonTitle{{Expressions: make([]backend.CommonExpression, 0)}}
-		commonHttpCase    = backend.HttpCasesHandler[backend.EmptyJson, *backend.ExpressionsJsonTitle]{RequestsToSend: requestsToTest,
-			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/expressions",
-			ExpectedHttpCode: http.StatusOK}
-	)
-	testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
-
+func testExpressionsHandler404(t *testing.T) {
+	t.Run("WrongMethod", func(t *testing.T) {
+		t.Cleanup(func() {
+			exprsList = CallEmptyExpressionListFabric()
+		})
+		var (
+			expressionToList = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
+		)
+		exprsList = callExprsListStubFabric(testUser.GetId(), expressionToList...)
+		var (
+			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
+			expectedResponses = []*backend.EmptyJson{{}}
+			commonHttpCase    = backend.HttpCasesHandler[*JwtTokenJsonWrapperStub, *backend.EmptyJson]{RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/expressions",
+				ExpectedHttpCode: http.StatusNotFound}
+		)
+		testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
+	})
 }
 
 func TestExpressionHandler(t *testing.T) {
+	exprsList = CallEmptyExpressionListFabric()
 	t.Run("200Code", testExpressionsHandler200)
-	t.Run("Post", testExpressionsHandlerPost)
-	t.Run("Empty", testExpressionsHandlerEmpty)
+	t.Run("404Code", testExpressionsHandler404)
 }
 
 func testExpressionIdHandler200(t *testing.T) {
-	t.Cleanup(func() {
-		exprsList = CallEmptyExpressionListFabric()
-	})
-	var (
-		expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0},
-			{Id: 1, Status: backend.Completed, Result: 431}}
-	)
-	exprsList = callExprsListStubFabric(expectedExpressions...)
-	for ind, expExpr := range expectedExpressions {
-		t.Run(fmt.Sprintf("ExpressionId%d", ind), func(t *testing.T) {
-			var (
-				requestsToTest    = []backend.EmptyJson{{}}
-				expectedResponses = []*backend.ExpressionJsonTitleStub{{expExpr}}
-				serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[backend.EmptyJson, *backend.ExpressionJsonTitleStub]{
-					RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
-					UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: fmt.Sprintf("/api/v1/expressions/%d", ind),
-					ExpectedHttpCode: http.StatusOK}
-			)
-			testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
+	t.Run("FromDb", func(t *testing.T) {
+		t.Cleanup(func() {
+			db.(*DbStub).FlushExprs()
 		})
-	}
+		var (
+			expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 12}}
+		)
+		db.(*DbStub).InsertExprs(testUser.GetId(), expectedExpressions)
+		var (
+			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
+			expectedResponses = []*backend.ExpressionJsonTitleStub{{expectedExpressions[0]}}
+			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*JwtTokenJsonWrapperStub,
+				*backend.ExpressionJsonTitleStub]{RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses,
+				HttpMethod: "GET", UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
+				ExpectedHttpCode: http.StatusOK}
+		)
+		testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
+	})
+	t.Run("FromExprsList", func(t *testing.T) {
+		t.Cleanup(func() {
+			exprsList = CallEmptyExpressionListFabric()
+		})
+		var (
+			expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 23}}
+		)
+		exprsList = callExprsListStubFabric(testUser.GetId(), expectedExpressions...)
+		var (
+			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
+			expectedResponses = []*backend.ExpressionJsonTitleStub{{expectedExpressions[0]}}
+			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*JwtTokenJsonWrapperStub,
+				*backend.ExpressionJsonTitleStub]{RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses,
+				HttpMethod: "GET", UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
+				ExpectedHttpCode: http.StatusOK}
+		)
+		testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
+	})
 }
 
 func testExpressionIdHandler404(t *testing.T) {
-	t.Cleanup(func() {
-		exprsList = CallEmptyExpressionListFabric()
+	t.Run("WrongId", func(t *testing.T) {
+		t.Cleanup(func() {
+			exprsList = CallEmptyExpressionListFabric()
+		})
+		var (
+			expressionToList = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
+		)
+		exprsList = callExprsListStubFabric(testUser.GetId(), expressionToList...)
+		var (
+			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
+			expectedResponses = []*backend.EmptyJson{{}}
+			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*JwtTokenJsonWrapperStub, *backend.EmptyJson]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
+				UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/1",
+				ExpectedHttpCode: http.StatusNotFound}
+		)
+		testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
 	})
-	var (
-		expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
-	)
-	exprsList = callExprsListStubFabric(expectedExpressions...)
-	var (
-		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*backend.EmptyJson{{}}
-		serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[backend.EmptyJson, *backend.EmptyJson]{
-			RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
-			UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/1",
-			ExpectedHttpCode: http.StatusNotFound}
-	)
-	testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
-}
-
-func testExpressionIdHandlerPost(t *testing.T) {
-	t.Cleanup(func() {
-		exprsList = CallEmptyExpressionListFabric()
+	t.Run("WrongMethod", func(t *testing.T) {
+		var (
+			expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
+		)
+		exprsList = callExprsListStubFabric(testUser.GetId(), expectedExpressions...)
+		var (
+			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
+			expectedResponses = []*backend.EmptyJson{{}}
+			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*JwtTokenJsonWrapperStub, *backend.EmptyJson]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "POST",
+				UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
+				ExpectedHttpCode: http.StatusNotFound}
+		)
+		testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
 	})
-	var (
-		expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
-	)
-	exprsList = callExprsListStubFabric(expectedExpressions...)
-	var (
-		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*backend.EmptyJson{{}}
-		serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[backend.EmptyJson, *backend.EmptyJson]{
-			RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "POST",
-			UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
-			ExpectedHttpCode: http.StatusNotFound}
-	)
-	testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
-}
-
-func testExpressionIdHandlerEmpty(t *testing.T) {
-	exprsList = CallEmptyExpressionListFabric()
-	var (
-		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*backend.EmptyJson{{}}
-		serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[backend.EmptyJson, *backend.EmptyJson]{
-			RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
-			UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
-			ExpectedHttpCode: http.StatusNotFound}
-	)
-	testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
+	t.Run("EmptyStorages", func(t *testing.T) {
+		var (
+			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
+			expectedResponses = []*backend.EmptyJson{{}}
+			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*JwtTokenJsonWrapperStub, *backend.EmptyJson]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
+				UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
+				ExpectedHttpCode: http.StatusNotFound}
+		)
+		testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
+	})
 }
 
 func TestExpressionIdHandler(t *testing.T) {
+	exprsList = CallEmptyExpressionListFabric()
 	t.Run("200Code", testExpressionIdHandler200)
 	t.Run("404Code", testExpressionIdHandler404)
-	t.Run("Post", testExpressionIdHandlerPost)
-	t.Run("Empty", testExpressionIdHandlerEmpty)
 }
 
 func TestPanicMiddlewareGood(t *testing.T) {
@@ -427,7 +449,7 @@ func testGetTaskNotFoundCode(t *testing.T) {
 	t.Cleanup(func() {
 		exprsList = CallEmptyExpressionListFabric()
 	})
-	exprsList = callExprsListStubFabric()
+	exprsList = callExprsEmptyListFabric()
 	result, err = g.GetTask(context.TODO(), &pb.Empty{})
 	assert.Equal(t, codes.NotFound, status.Code(err))
 	nilToTaskToSend := (*pb.TaskToSend)(nil) // возвращается не просто nil
@@ -443,7 +465,7 @@ func testGetTaskInternalCode(t *testing.T) {
 	t.Cleanup(func() {
 		exprsList = CallEmptyExpressionListFabric()
 	})
-	exprsList = callExprsListStubFabric(backend.ExpressionStub{
+	exprsList = callExprsListStubFabric(testUser.GetId(), backend.ExpressionStub{
 		Id:           0,
 		Status:       backend.Ready,
 		TasksHandler: &backend.TasksHandlerStub{},
@@ -466,7 +488,7 @@ func testGetTaskOkCode(t *testing.T) {
 	var (
 		expectedTask = backend.CallTaskFabric(0, 2, 4, "+", backend.ReadyToCalc)
 	)
-	exprsList = callExprsListStubFabric(backend.ExpressionStub{
+	exprsList = callExprsListStubFabric(testUser.GetId(), backend.ExpressionStub{
 		Id:           0,
 		Status:       backend.Ready,
 		TasksHandler: &backend.TasksHandlerStub{Buf: map[int32]backend.InternalTask{0: expectedTask}}})
@@ -504,7 +526,7 @@ func testSendTaskNotFoundCode(t *testing.T) {
 		}
 		err error
 	)
-	exprsList = callExprsListStubFabric()
+	exprsList = callExprsEmptyListFabric()
 	_, err = g.SendTask(context.TODO(), toSend)
 	assert.Equal(t, codes.NotFound, status.Code(err))
 }
@@ -522,7 +544,7 @@ func testSendTaskAbortedCode(t *testing.T) {
 		err          error
 		tasksHandler = &backend.TasksHandlerStub{Buf: make(map[int32]backend.InternalTask)}
 	)
-	exprsList = callExprsListStubFabric(backend.ExpressionStub{
+	exprsList = callExprsListStubFabric(testUser.GetId(), backend.ExpressionStub{
 		Id:           0, // pairId 15 = expr id 3 and internal task Id (unused) 3
 		Status:       backend.Ready,
 		Result:       0,
@@ -548,7 +570,7 @@ func testSendTaskOkCode(t *testing.T) {
 		tasksHandler = &backend.TasksHandlerStub{Buf: map[int32]backend.InternalTask{expectedPairId: backend.CallTaskFabric(
 			expectedPairId, 2, 3, "-", backend.ReadyToCalc)}}
 	)
-	exprsList = callExprsListStubFabric(backend.ExpressionStub{
+	exprsList = callExprsListStubFabric(testUser.GetId(), backend.ExpressionStub{
 		Id:           0,
 		Status:       backend.Ready,
 		Result:       0,
