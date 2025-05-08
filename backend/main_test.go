@@ -132,7 +132,7 @@ func prepareServices() (stopFn func(), err error) {
 		// с данным PGID
 		syscall.Kill(-agentPgid, syscall.SIGINT)
 	}
-	time.Sleep(1 * time.Second) // процессы не успевают подняться
+	time.Sleep(3 * time.Second) // процессы не успевают подняться
 	// TODO:
 	// registerUserInOrchestrator
 	// getTokenFromOrchestrator
