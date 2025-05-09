@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"testing"
 )
@@ -25,7 +26,7 @@ testThroughHttpHandler запускает все тесты через handler, 
 */
 func testThroughHttpHandler[K, V backend.JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
 	casesHandler backend.HttpCasesHandler[K, V], compareFunc func(t *testing.T, w *httptest.ResponseRecorder,
-		casesHandler backend.CasesHandler, currentTestCase backend.ByteCase)) {
+	casesHandler backend.CasesHandler, currentTestCase backend.ByteCase)) {
 	var (
 		cases []backend.ByteCase
 		err   error
@@ -55,7 +56,7 @@ testThroughServeMux работает также, как и testThroughHttpHandle
 func testThroughServeMux[K, V backend.JsonPayload](
 	handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
 	casesHandler backend.ServerMuxHttpCasesHandler[K, V], compareFunc func(t *testing.T, w *httptest.ResponseRecorder,
-		casesHandler backend.CasesHandler, currentTestCase backend.ByteCase)) {
+	casesHandler backend.CasesHandler, currentTestCase backend.ByteCase)) {
 	var (
 		cases []backend.ByteCase
 		err   error
@@ -149,6 +150,20 @@ func testByStructCompareThroughHttpHandler[K backend.JsonPayload, V parsedToken]
 	}
 }
 
+func formExpectedExpressions(exprsInSlices ...[]backend.ExpressionStub) (sortedExprs []backend.ExpressionStub) {
+	for _, exprs := range exprsInSlices {
+		sortedExprs = append(sortedExprs, exprs...)
+	}
+	slices.SortFunc(sortedExprs, func(a, b backend.ExpressionStub) int {
+		if a.GetId() >= b.GetId() {
+			return 0
+		} else {
+			return -1
+		}
+	})
+	return
+}
+
 var testUser = UserStub{
 	Login:    "test",
 	Password: "qwerty",
@@ -217,8 +232,7 @@ func testExpressionsHandler200(t *testing.T) {
 		)
 		db.(*DbStub).InsertExprs(testUser.GetId(), expectedExpressionsFromDb)
 		exprsList = callExprsListStubFabric(testUser.GetId(), expectedExpressionsFromList...)
-		expectedExpressions = append(expectedExpressions, expectedExpressionsFromList...)
-		expectedExpressions = append(expectedExpressions, expectedExpressionsFromDb...)
+		expectedExpressions = formExpectedExpressions(expectedExpressionsFromList, expectedExpressionsFromDb)
 		var (
 			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
 			expectedResponses = []*backend.ExpressionsJsonTitleStub{{expectedExpressions}}
@@ -229,6 +243,9 @@ func testExpressionsHandler200(t *testing.T) {
 		testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
 	})
 	t.Run("FromExprsList", func(t *testing.T) {
+		t.Cleanup(func() {
+			exprsList = CallEmptyExpressionListFabric()
+		})
 		var (
 			expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0},
 				{Id: 1, Status: backend.Completed, Result: 432}, {Id: 2, Status: backend.Cancelled, Result: 0},
@@ -265,7 +282,7 @@ func testExpressionsHandler200(t *testing.T) {
 	t.Run("EmptyStorages", func(t *testing.T) {
 		var (
 			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
-			expectedResponses = []*backend.ExpressionsJsonTitle{{Expressions: make([]backend.ShortExpression, 0)}}
+			expectedResponses = []*backend.ExpressionsJsonTitle{{Expressions: nil}}
 			commonHttpCase    = backend.HttpCasesHandler[*JwtTokenJsonWrapperStub, *backend.ExpressionsJsonTitle]{
 				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
 				UrlTarget: "/api/v1/expressions", ExpectedHttpCode: http.StatusOK}
@@ -361,6 +378,9 @@ func testExpressionIdHandler404(t *testing.T) {
 		var (
 			expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
 		)
+		t.Cleanup(func() {
+			exprsList = CallEmptyExpressionListFabric()
+		})
 		exprsList = callExprsListStubFabric(testUser.GetId(), expectedExpressions...)
 		var (
 			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
