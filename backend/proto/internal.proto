@@ -1,0 +1,23 @@
+syntax = "proto3";
+package main;
+option go_package = "github.com/Debianov/calc-ya-go-24/backend/orchestrator";
+
+message Empty {}
+
+message TaskToSend {
+  int32 PairId = 1;
+  int64 Arg1 = 2;
+  int64 Arg2 = 3;
+  string Operation = 4;
+  string PermissibleDuration = 5;
+}
+
+message TaskResult {
+  int32 PairId = 1;
+  int64 result = 2;
+}
+
+service TaskService {
+  rpc GetTask (Empty) returns (TaskToSend);
+  rpc SendTask (TaskResult) returns (Empty);
+}

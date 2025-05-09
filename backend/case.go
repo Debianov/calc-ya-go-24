@@ -4,7 +4,13 @@ import (
 	"errors"
 )
 
-type HttpCases[K, V JsonPayload] struct {
+type CasesHandler interface {
+	GetHttpMethod() string
+	GetUrlTarget() string
+	GetExpectedHttpCode() int
+}
+
+type HttpCasesHandler[K, V JsonPayload] struct {
 	RequestsToSend    []K
 	ExpectedResponses []V
 	HttpMethod        string
@@ -12,7 +18,19 @@ type HttpCases[K, V JsonPayload] struct {
 	ExpectedHttpCode  int
 }
 
-type ServerMuxHttpCases[K, V JsonPayload] struct {
+func (h *HttpCasesHandler[K, V]) GetHttpMethod() string {
+	return h.HttpMethod
+}
+
+func (h *HttpCasesHandler[K, V]) GetUrlTarget() string {
+	return h.UrlTarget
+}
+
+func (h *HttpCasesHandler[K, V]) GetExpectedHttpCode() int {
+	return h.ExpectedHttpCode
+}
+
+type ServerMuxHttpCasesHandler[K, V JsonPayload] struct {
 	RequestsToSend    []K
 	ExpectedResponses []V
 	HttpMethod        string
@@ -21,8 +39,20 @@ type ServerMuxHttpCases[K, V JsonPayload] struct {
 	ExpectedHttpCode  int
 }
 
+func (s *ServerMuxHttpCasesHandler[K, V]) GetHttpMethod() string {
+	return s.HttpMethod
+}
+
+func (s *ServerMuxHttpCasesHandler[K, V]) GetUrlTarget() string {
+	return s.UrlTarget
+}
+
+func (s *ServerMuxHttpCasesHandler[K, V]) GetExpectedHttpCode() int {
+	return s.ExpectedHttpCode
+}
+
 type ByteCase struct {
-	ToOutput []byte
+	ToSend   []byte
 	Expected []byte
 }
 
@@ -44,7 +74,7 @@ func ConvertToByteCases[K, V JsonPayload](reqs []K, resps []V) (result []ByteCas
 		if err != nil {
 			return
 		}
-		result = append(result, ByteCase{ToOutput: reqBuf, Expected: respBuf})
+		result = append(result, ByteCase{ToSend: reqBuf, Expected: respBuf})
 	}
 	return
 }

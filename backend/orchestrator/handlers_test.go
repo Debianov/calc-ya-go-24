@@ -1,438 +1,417 @@
-// Тестирование случаев, предусмотренных ТЗ.
-
 package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/Debianov/calc-ya-go-24/backend"
+	pb "github.com/Debianov/calc-ya-go-24/backend/proto"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strconv"
 	"testing"
-	"time"
 )
 
 var compareTemplate = "ожидается \"%s\", получен \"%s\""
 
-// testThroughHandler запускает все тесты через handler, используя параметры testCases.
-// Генерируемый запрос всегда отправляется с заголовком "Content-Type": "application/json".
-func testThroughHandler[K, V backend.JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
-	testCases backend.HttpCases[K, V]) {
+/*
+testThroughHttpHandler запускает все тесты через handler, используя параметры casesHandler.
+Генерируемый запрос всегда отправляется с заголовком "Content-Type": "application/json".
+*/
+func testThroughHttpHandler[K, V backend.JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
+	casesHandler backend.HttpCasesHandler[K, V], compareFunc func(t *testing.T, w *httptest.ResponseRecorder,
+	casesHandler backend.CasesHandler, currentTestCase backend.ByteCase)) {
 	var (
 		cases []backend.ByteCase
 		err   error
 	)
-	cases, err = backend.ConvertToByteCases(testCases.RequestsToSend, testCases.ExpectedResponses)
+	cases, err = backend.ConvertToByteCases(casesHandler.RequestsToSend, casesHandler.ExpectedResponses)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, testCase := range cases {
 		var (
 			w      = httptest.NewRecorder()
-			reader = bytes.NewReader(testCase.ToOutput)
-			req    = httptest.NewRequest(testCases.HttpMethod, testCases.UrlTarget, reader)
+			reader = bytes.NewReader(testCase.ToSend)
+			req    = httptest.NewRequest(casesHandler.HttpMethod, casesHandler.UrlTarget, reader)
 		)
 		req.Header.Set("Content-Type", "application/json")
 		handler(w, req)
-		if testCases.ExpectedHttpCode != w.Code {
-			t.Errorf(compareTemplate, strconv.Itoa(testCases.ExpectedHttpCode),
-				strconv.Itoa(w.Code))
-		}
-		if bytes.Compare(testCase.Expected, w.Body.Bytes()) != 0 {
-			t.Errorf(compareTemplate, testCase.Expected, w.Body.Bytes())
-		}
+		compareFunc(t, w, &casesHandler, testCase)
 	}
 }
 
-// testThroughServeMux работает также, как и testThroughHandler, но с обёрткой handler-а в http.ServerMux.
-// Необходимо для тестирования некоторых handler-ов, которые вызывают методы, связанные с парсингом URL в запросах
-// (например, request.PathValue). Парсинг происходит только при вызове http.ServerMux
-// (https://pkg.go.dev/net/http#ServeMux).
-func testThroughServeMux[K, V backend.JsonPayload](handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
-	testCases backend.ServerMuxHttpCases[K, V]) {
+/*
+testThroughServeMux работает также, как и testThroughHttpHandler, но с обёрткой handler-а в http.ServerMux.
+Необходимо для тестирования некоторых handler-ов, которые вызывают методы, связанные с парсингом URL в запросах
+к handler-у (например, request.PathValue): парсинг происходит только при вызове http.ServerMux
+(https://pkg.go.dev/net/http#ServeMux).
+*/
+func testThroughServeMux[K, V backend.JsonPayload](
+	handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
+	casesHandler backend.ServerMuxHttpCasesHandler[K, V], compareFunc func(t *testing.T, w *httptest.ResponseRecorder,
+	casesHandler backend.CasesHandler, currentTestCase backend.ByteCase)) {
 	var (
 		cases []backend.ByteCase
 		err   error
 	)
-	cases, err = backend.ConvertToByteCases(testCases.RequestsToSend, testCases.ExpectedResponses)
+	cases, err = backend.ConvertToByteCases(casesHandler.RequestsToSend, casesHandler.ExpectedResponses)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, testCase := range cases {
 		var (
 			w         = httptest.NewRecorder()
-			reader    = bytes.NewReader(testCase.ToOutput)
-			req       = httptest.NewRequest(testCases.HttpMethod, testCases.UrlTarget, reader)
+			reader    = bytes.NewReader(testCase.ToSend)
+			req       = httptest.NewRequest(casesHandler.HttpMethod, casesHandler.UrlTarget, reader)
 			serverMux = http.NewServeMux()
 		)
 		req.Header.Set("Content-Type", "application/json")
-		serverMux.HandleFunc(testCases.UrlTemplate, handler)
+		serverMux.HandleFunc(casesHandler.UrlTemplate, handler)
 		serverMux.ServeHTTP(w, req)
-		if testCases.ExpectedHttpCode != w.Code {
-			t.Errorf(compareTemplate, strconv.Itoa(testCases.ExpectedHttpCode),
-				strconv.Itoa(w.Code))
-		}
-		if bytes.Compare(testCase.Expected, w.Body.Bytes()) != 0 {
-			t.Errorf(compareTemplate, testCase.Expected, w.Body.Bytes())
-		}
+		compareFunc(t, w, &casesHandler, testCase)
 	}
 }
 
-type ExpressionStub struct {
-	ID int `json:"id"`
+func defaultCmpFunc(t *testing.T, w *httptest.ResponseRecorder,
+	casesHandler backend.CasesHandler, currentTestCase backend.ByteCase) {
+	if casesHandler.GetExpectedHttpCode() != w.Code {
+		t.Errorf(compareTemplate, strconv.Itoa(casesHandler.GetExpectedHttpCode()),
+			strconv.Itoa(w.Code))
+	}
+	if bytes.Compare(currentTestCase.Expected, w.Body.Bytes()) != 0 {
+		t.Errorf(compareTemplate, currentTestCase.Expected, w.Body.Bytes())
+	}
 }
 
-func (e ExpressionStub) Marshal() (result []byte, err error) {
-	result, err = json.Marshal(&e)
-	return
-}
-
-func testCalcHandler201(t *testing.T) {
-	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
-	})
+/*
+testByStructCompareThroughHttpHandler переводит case-ы в backend.ByteCase, но
+сравнивает структуры, что может быть принципиально важно, если идёт тестирование
+handler-ов, которые возвращают байт-строки с данными, нуждающиеся в
+манипуляциях для того, чтобы они были пригодны для сравнения
+Например, jwt-токены. Их нельзя сравнивать напрямую, т.к в любой отрезок времени
+возвращается уникальная последовательность символов.
+*/
+func testByStructCompareThroughHttpHandler[K backend.JsonPayload, V parsedToken](
+	handler func(w http.ResponseWriter, r *http.Request), t *testing.T,
+	casesHandler backend.HttpCasesHandler[K, V]) {
 	var (
-		requestsToTest    = []backend.RequestJson{{"2+2*4"}, {"4*2+3*5"}}
-		expectedResponses = []*ExpressionStub{{ID: 0}, {ID: 1}}
-		commonHttpCase    = backend.HttpCases[backend.RequestJson, *ExpressionStub]{RequestsToSend: requestsToTest,
-			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/calculate",
-			ExpectedHttpCode: http.StatusCreated}
+		cases      []backend.ByteCase
+		emptyJsons = make([]backend.EmptyJson, len(casesHandler.ExpectedResponses)) // ExpectedResponses не будут
+		// использоваться, поэтому мы заменяем их на пустые json-ы. Однако, мы должны передавать такое количество,
+		//которое будет = casesHandler.RequestsToSend
+		err error
 	)
-	testThroughHandler(calcHandler, t, commonHttpCase)
-
-	var (
-		expectedLen   = len(expectedResponses)
-		expectedTasks = [][]backend.Task{{{PairID: 0, Arg1: int64(2), Arg2: int64(4), Operation: "*",
-			Status: backend.ReadyToCalc}, {PairID: 1, Arg2: int64(2), Operation: "+", Status: backend.WaitingOtherTasks}},
-			{{PairID: 2, Arg1: int64(4), Arg2: int64(2), Operation: "*", Status: backend.ReadyToCalc}, {PairID: 3,
-				Arg1: int64(3), Arg2: int64(5), Operation: "*", Status: backend.ReadyToCalc},
-				{PairID: 5, Operation: "+", Status: backend.WaitingOtherTasks}},
+	cases, err = backend.ConvertToByteCases(casesHandler.RequestsToSend, emptyJsons)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for ind, testCase := range cases {
+		var (
+			w      = httptest.NewRecorder()
+			reader = bytes.NewReader(testCase.ToSend)
+			req    = httptest.NewRequest(casesHandler.HttpMethod, casesHandler.UrlTarget, reader)
+		)
+		req.Header.Set("Content-Type", "application/json")
+		handler(w, req)
+		if casesHandler.GetExpectedHttpCode() != w.Code {
+			t.Errorf(compareTemplate, strconv.Itoa(casesHandler.GetExpectedHttpCode()),
+				strconv.Itoa(w.Code))
 		}
-	)
+		var (
+			err       error
+			respBuf   []byte
+			realToken JwtTokenJsonWrapper
+		)
+		respBuf, err = io.ReadAll(w.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = json.Unmarshal(respBuf, &realToken)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var (
+			userFromParsedToken   backend.CommonUser
+			userFromExpectedToken = casesHandler.ExpectedResponses[ind].GetExpectedUser()
+		)
+		userFromParsedToken, err = ParseJwt(realToken.Token)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.Equal(t, userFromExpectedToken.GetLogin(), userFromParsedToken.GetLogin())
+		assert.Equal(t, userFromExpectedToken.GetId(), userFromParsedToken.GetId())
+	}
+}
 
-	exprs := exprsList.GetAllExprs()
-	slices.SortFunc(exprs, func(expression *backend.Expression, expression2 *backend.Expression) int {
-		if expression.ID >= expression2.ID {
+func formExpectedExpressions(exprsInSlices ...[]backend.ExpressionStub) (sortedExprs []backend.ExpressionStub) {
+	for _, exprs := range exprsInSlices {
+		sortedExprs = append(sortedExprs, exprs...)
+	}
+	slices.SortFunc(sortedExprs, func(a, b backend.ExpressionStub) int {
+		if a.GetId() >= b.GetId() {
 			return 0
 		} else {
 			return -1
 		}
 	})
-	assert.Equal(t, len(exprs), expectedLen)
-	for exprInd, expr := range exprs {
-		var tasksListLen = expr.GetTasksHandler().Len()
-		for taskInd := 0; taskInd < tasksListLen; taskInd++ {
-			task := expr.GetTasksHandler().Get(taskInd)
-			assert.Equal(t, task.PairID, expectedTasks[exprInd][taskInd].PairID)
-			assert.Equal(t, task.Arg1, expectedTasks[exprInd][taskInd].Arg1)
-			assert.Equal(t, task.Arg2, expectedTasks[exprInd][taskInd].Arg2)
-			assert.Equal(t, task.Operation, expectedTasks[exprInd][taskInd].Operation)
-		}
-	}
+	return
 }
 
-func testCalcHandler422(t *testing.T) {
-	var (
-		requestsToTest = []backend.RequestJson{{"2++2*4"}, {"4*(2+3"}, {"8+2/3)"},
-			{"4*()2+3"}}
-		expectedResponses = []backend.EmptyJson{{}, {}, {}, {}}
-		commonHttpCase    = backend.HttpCases[backend.RequestJson, backend.EmptyJson]{RequestsToSend: requestsToTest,
-			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/calculate",
-			ExpectedHttpCode: http.StatusUnprocessableEntity}
-	)
-	testThroughHandler(calcHandler, t, commonHttpCase)
+var testUser = backend.UserStub{
+	Login:    "test",
+	Password: "qwerty",
+	Id:       0,
 }
-
-func testCalcHandlerGet(t *testing.T) {
-	var (
-		requestsToTest    = []backend.RequestJson{{"2+2*4"}}
-		expectedResponses = []*backend.EmptyJson{{}}
-		commonHttpCase    = backend.HttpCases[backend.RequestJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
-			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/calculate",
-			ExpectedHttpCode: http.StatusOK}
-	)
-	testThroughHandler(calcHandler, t, commonHttpCase)
-}
+var token, _ = GenerateJwt(&testUser)
 
 func TestCalcHandler(t *testing.T) {
-	t.Run("TestCalcHandler201", testCalcHandler201)
-	t.Run("TestCalcHandler422", testCalcHandler422)
-	t.Run("TestCalcHandlerGet", testCalcHandlerGet)
+	t.Cleanup(func() {
+		exprsList = CallEmptyExpressionListFabric()
+	})
+	exprsList = CallEmptyExpressionListFabric()
+	db = callStubDbWithRegisteredUserFabric(testUser)
+
+	t.Run("201Code", func(t *testing.T) {
+		var (
+			requestsToTest = []*backend.RequestJsonStub{{Token: token, Expression: "2+2*4"},
+				{Token: token, Expression: "4*2+3*5"}}
+			expectedResponses = []*backend.ExpressionJsonStub{{ID: 0}, {ID: 1}}
+			commonHttpCase    = backend.HttpCasesHandler[*backend.RequestJsonStub, *backend.ExpressionJsonStub]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: http.MethodPost,
+				UrlTarget: "/api/v1/calculate", ExpectedHttpCode: http.StatusCreated}
+		)
+		testThroughHttpHandler(calcHandler, t, commonHttpCase, defaultCmpFunc)
+	})
+	t.Run("422Code", func(t *testing.T) {
+		var (
+			requestsToTest = []*backend.RequestJsonStub{{Token: token, Expression: "2++2*4"},
+				{Token: token, Expression: "4*(2+3"}, {Token: token, Expression: "8+2/3)"},
+				{Token: token, Expression: "4*()2+3"}}
+			expectedResponses = []backend.EmptyJson{{}, {}, {}, {}}
+			commonHttpCase    = backend.HttpCasesHandler[*backend.RequestJsonStub, backend.EmptyJson]{RequestsToSend: requestsToTest,
+				ExpectedResponses: expectedResponses, HttpMethod: http.MethodPost, UrlTarget: "/api/v1/calculate",
+				ExpectedHttpCode: http.StatusUnprocessableEntity}
+		)
+		testThroughHttpHandler(calcHandler, t, commonHttpCase, defaultCmpFunc)
+	})
+	t.Run("404Code", func(t *testing.T) {
+		var (
+			requestsToTest    = []*backend.RequestJsonStub{{Token: token, Expression: "2+2*4"}}
+			expectedResponses = []*backend.EmptyJson{{}}
+			commonHttpCase    = backend.HttpCasesHandler[*backend.RequestJsonStub, *backend.EmptyJson]{RequestsToSend: requestsToTest,
+				ExpectedResponses: expectedResponses, HttpMethod: http.MethodGet, UrlTarget: "/api/v1/calculate",
+				ExpectedHttpCode: http.StatusNotFound}
+		)
+		testThroughHttpHandler(calcHandler, t, commonHttpCase, defaultCmpFunc)
+	})
 }
 
 func testExpressionsHandler200(t *testing.T) {
 	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
+		exprsList = CallEmptyExpressionListFabric()
 	})
-	var (
-		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0},
-			{ID: 1, Status: backend.Completed, Result: 432}, {ID: 2, Status: backend.Cancelled, Result: 0},
-			{ID: 3, Status: backend.NoReadyTasks, Result: 0}, {ID: 4, Status: backend.Completed, Result: -2345}}
-	)
-	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
-	var (
-		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*backend.ExpressionsJsonTitle{{expectedExpressions}}
-		commonHttpCase    = backend.HttpCases[backend.EmptyJson, *backend.ExpressionsJsonTitle]{RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/expressions",
-			ExpectedHttpCode: http.StatusOK}
-	)
-	testThroughHandler(expressionsHandler, t, commonHttpCase)
+	db = callStubDbWithRegisteredUserFabric(testUser)
+
+	t.Run("FromDbAndExprsList", func(t *testing.T) {
+		t.Cleanup(func() {
+			exprsList = CallEmptyExpressionListFabric()
+			db.(*DbStub).FlushExprs()
+		})
+		var (
+			expectedExpressionsFromList = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0},
+				{Id: 2, Status: backend.Cancelled, Result: 0}, {Id: 3, Status: backend.NoReadyTasks, Result: 0}}
+			expectedExpressionsFromDb = []backend.ExpressionStub{{Id: 1, Status: backend.Completed, Result: 432},
+				{Id: 4, Status: backend.Completed, Result: -2345}}
+			expectedExpressions []backend.ExpressionStub
+		)
+		db.(*DbStub).InsertExprs(testUser.GetId(), expectedExpressionsFromDb)
+		exprsList = callExprsListStubFabric(testUser.GetId(), expectedExpressionsFromList...)
+		expectedExpressions = formExpectedExpressions(expectedExpressionsFromList, expectedExpressionsFromDb)
+		var (
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
+			expectedResponses = []*backend.ExpressionsJsonTitleStub{{expectedExpressions}}
+			commonHttpCase    = backend.HttpCasesHandler[*backend.JwtTokenJsonWrapperStub, *backend.ExpressionsJsonTitleStub]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: http.MethodPost,
+				UrlTarget: "/api/v1/expressions", ExpectedHttpCode: http.StatusOK}
+		)
+		testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
+	})
+	t.Run("FromExprsList", func(t *testing.T) {
+		t.Cleanup(func() {
+			exprsList = CallEmptyExpressionListFabric()
+		})
+		var (
+			expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0},
+				{Id: 1, Status: backend.Completed, Result: 432}, {Id: 2, Status: backend.Cancelled, Result: 0},
+				{Id: 3, Status: backend.NoReadyTasks, Result: 0}, {Id: 4, Status: backend.Completed, Result: -2345}}
+		)
+		exprsList = callExprsListStubFabric(testUser.GetId(), expectedExpressions...)
+		var (
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
+			expectedResponses = []*backend.ExpressionsJsonTitleStub{{expectedExpressions}}
+			commonHttpCase    = backend.HttpCasesHandler[*backend.JwtTokenJsonWrapperStub, *backend.ExpressionsJsonTitleStub]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: http.MethodPost,
+				UrlTarget: "/api/v1/expressions", ExpectedHttpCode: http.StatusOK}
+		)
+		testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
+	})
+	t.Run("FromDb", func(t *testing.T) {
+		t.Cleanup(func() {
+			db.(*DbStub).FlushExprs()
+		})
+		var (
+			expectedExpressions = []backend.ExpressionStub{{Id: 1, Status: backend.Completed, Result: 432},
+				{Id: 4, Status: backend.Completed, Result: -2345}}
+		)
+		db.(*DbStub).InsertExprs(testUser.GetId(), expectedExpressions)
+		var (
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
+			expectedResponses = []*backend.ExpressionsJsonTitleStub{{expectedExpressions}}
+			commonHttpCase    = backend.HttpCasesHandler[*backend.JwtTokenJsonWrapperStub, *backend.ExpressionsJsonTitleStub]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: http.MethodPost,
+				UrlTarget: "/api/v1/expressions", ExpectedHttpCode: http.StatusOK}
+		)
+		testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
+	})
+	t.Run("EmptyStorages", func(t *testing.T) {
+		var (
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
+			expectedResponses = []*backend.ExpressionsJsonTitle{{Expressions: nil}}
+			commonHttpCase    = backend.HttpCasesHandler[*backend.JwtTokenJsonWrapperStub, *backend.ExpressionsJsonTitle]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: http.MethodPost,
+				UrlTarget: "/api/v1/expressions", ExpectedHttpCode: http.StatusOK}
+		)
+		testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
+	})
 }
 
-func testExpressionsHandlerPost(t *testing.T) {
-	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
+func testExpressionsHandler404(t *testing.T) {
+	t.Run("WrongHttpMethod", func(t *testing.T) {
+		t.Cleanup(func() {
+			exprsList = CallEmptyExpressionListFabric()
+		})
+		var (
+			expressionToList = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
+		)
+		exprsList = callExprsListStubFabric(testUser.GetId(), expressionToList...)
+		var (
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
+			expectedResponses = []*backend.EmptyJson{{}}
+			commonHttpCase    = backend.HttpCasesHandler[*backend.JwtTokenJsonWrapperStub, *backend.EmptyJson]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: http.MethodGet,
+				UrlTarget:        "/api/v1/expressions",
+				ExpectedHttpCode: http.StatusNotFound}
+		)
+		testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
 	})
-	var (
-		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0}}
-	)
-	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
-	var (
-		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*backend.EmptyJson{{}}
-		commonHttpCase    = backend.HttpCases[backend.EmptyJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
-			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/expressions",
-			ExpectedHttpCode: http.StatusOK}
-	)
-	testThroughHandler(expressionsHandler, t, commonHttpCase)
-}
-
-func testExpressionsHandlerEmpty(t *testing.T) {
-	exprsList = backend.ExpressionListEmptyFabric()
-	var (
-		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*backend.ExpressionsJsonTitle{{Expressions: make([]*backend.Expression, 0)}}
-		commonHttpCase    = backend.HttpCases[backend.EmptyJson, *backend.ExpressionsJsonTitle]{RequestsToSend: requestsToTest,
-			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/expressions",
-			ExpectedHttpCode: http.StatusOK}
-	)
-	testThroughHandler(expressionsHandler, t, commonHttpCase)
-
 }
 
 func TestExpressionHandler(t *testing.T) {
-	t.Run("TestExpressionsHandler200", testExpressionsHandler200)
-	t.Run("TestExpressionsHandlerPost", testExpressionsHandlerPost)
-	t.Run("TestExpressionsHandlerEmpty", testExpressionsHandlerEmpty)
+	exprsList = CallEmptyExpressionListFabric()
+	t.Run("200Code", testExpressionsHandler200)
+	t.Run("404Code", testExpressionsHandler404)
 }
 
 func testExpressionIdHandler200(t *testing.T) {
-	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
-	})
-	var (
-		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0},
-			{ID: 1, Status: backend.Completed, Result: 431}}
-	)
-	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
-	for ind, expExpr := range expectedExpressions {
-		t.Run(fmt.Sprintf("ExpressionId%d", ind), func(t *testing.T) {
-			var (
-				requestsToTest    = []backend.EmptyJson{{}}
-				expectedResponses = []*backend.ExpressionJsonTitle{{expExpr}}
-				serverMuxHttpCase = backend.ServerMuxHttpCases[backend.EmptyJson, *backend.ExpressionJsonTitle]{
-					RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
-					UrlTemplate: "/api/v1/expressions/{ID}", UrlTarget: fmt.Sprintf("/api/v1/expressions/%d", ind),
-					ExpectedHttpCode: http.StatusOK}
-			)
-			testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
+	t.Run("FromDb", func(t *testing.T) {
+		t.Cleanup(func() {
+			db.(*DbStub).FlushExprs()
 		})
-	}
+		var (
+			expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 12}}
+		)
+		db.(*DbStub).InsertExprs(testUser.GetId(), expectedExpressions)
+		var (
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
+			expectedResponses = []*backend.ExpressionJsonTitleStub{{expectedExpressions[0]}}
+			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*backend.JwtTokenJsonWrapperStub,
+				*backend.ExpressionJsonTitleStub]{RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses,
+				HttpMethod: http.MethodPost, UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
+				ExpectedHttpCode: http.StatusOK}
+		)
+		testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
+	})
+	t.Run("FromExprsList", func(t *testing.T) {
+		t.Cleanup(func() {
+			exprsList = CallEmptyExpressionListFabric()
+		})
+		var (
+			expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 23}}
+		)
+		exprsList = callExprsListStubFabric(testUser.GetId(), expectedExpressions...)
+		var (
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
+			expectedResponses = []*backend.ExpressionJsonTitleStub{{expectedExpressions[0]}}
+			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*backend.JwtTokenJsonWrapperStub,
+				*backend.ExpressionJsonTitleStub]{RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses,
+				HttpMethod: http.MethodPost, UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
+				ExpectedHttpCode: http.StatusOK}
+		)
+		testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
+	})
 }
 
 func testExpressionIdHandler404(t *testing.T) {
-	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
+	t.Run("WrongId", func(t *testing.T) {
+		t.Cleanup(func() {
+			exprsList = CallEmptyExpressionListFabric()
+		})
+		var (
+			expressionToList = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
+		)
+		exprsList = callExprsListStubFabric(testUser.GetId(), expressionToList...)
+		var (
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
+			expectedResponses = []*backend.EmptyJson{{}}
+			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*backend.JwtTokenJsonWrapperStub, *backend.EmptyJson]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: http.MethodPost,
+				UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/1",
+				ExpectedHttpCode: http.StatusNotFound}
+		)
+		testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
 	})
-	var (
-		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0}}
-	)
-	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
-	var (
-		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*backend.EmptyJson{{}}
-		serverMuxHttpCase = backend.ServerMuxHttpCases[backend.EmptyJson, *backend.EmptyJson]{
-			RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
-			UrlTemplate: "/api/v1/expressions/{ID}", UrlTarget: "/api/v1/expressions/1",
-			ExpectedHttpCode: http.StatusNotFound}
-	)
-	testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
-}
-
-func testExpressionIdHandlerPost(t *testing.T) {
-	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
+	t.Run("WrongMethod", func(t *testing.T) {
+		var (
+			expectedExpressions = []backend.ExpressionStub{{Id: 0, Status: backend.Ready, Result: 0}}
+		)
+		t.Cleanup(func() {
+			exprsList = CallEmptyExpressionListFabric()
+		})
+		exprsList = callExprsListStubFabric(testUser.GetId(), expectedExpressions...)
+		var (
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
+			expectedResponses = []*backend.EmptyJson{{}}
+			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*backend.JwtTokenJsonWrapperStub, *backend.EmptyJson]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: http.MethodGet,
+				UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
+				ExpectedHttpCode: http.StatusNotFound}
+		)
+		testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
 	})
-	var (
-		expectedExpressions = []*backend.Expression{{ID: 0, Status: backend.Ready, Result: 0}}
-	)
-	exprsList = backend.ExpressionListFabricWithElements(expectedExpressions)
-	var (
-		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*backend.EmptyJson{{}}
-		serverMuxHttpCase = backend.ServerMuxHttpCases[backend.EmptyJson, *backend.EmptyJson]{
-			RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "POST",
-			UrlTemplate: "/api/v1/expressions/{ID}", UrlTarget: "/api/v1/expressions/0",
-			ExpectedHttpCode: http.StatusOK}
-	)
-	testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
-}
-
-func testExpressionIdHandlerEmpty(t *testing.T) {
-	exprsList = backend.ExpressionListEmptyFabric()
-	var (
-		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*backend.EmptyJson{{}}
-		serverMuxHttpCase = backend.ServerMuxHttpCases[backend.EmptyJson, *backend.EmptyJson]{
-			RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
-			UrlTemplate: "/api/v1/expressions/{ID}", UrlTarget: "/api/v1/expressions/0",
-			ExpectedHttpCode: http.StatusNotFound}
-	)
-	testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase)
+	t.Run("EmptyStorages", func(t *testing.T) {
+		var (
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
+			expectedResponses = []*backend.EmptyJson{{}}
+			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*backend.JwtTokenJsonWrapperStub, *backend.EmptyJson]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: http.MethodPost,
+				UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
+				ExpectedHttpCode: http.StatusNotFound}
+		)
+		testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
+	})
 }
 
 func TestExpressionIdHandler(t *testing.T) {
-	t.Run("TestExpressionIdHandler200", testExpressionIdHandler200)
-	t.Run("TestExpressionIdHandler404", testExpressionIdHandler404)
-	t.Run("TestExpressionIdHandlerPost", testExpressionIdHandlerPost)
-	t.Run("TestExpressionIdHandlerEmpty", testExpressionIdHandlerEmpty)
-}
-
-func testTaskGetHandler200(t *testing.T) {
-	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
-	})
-	exprsList.ExprFabricAdd([]string{"2", "3", "*"})
-	var (
-		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*backend.TaskToSend{{Task: &backend.Task{
-			PairID:        0,
-			Arg1:          2,
-			Arg2:          3,
-			Operation:     "*",
-			OperationTime: 1 * time.Second,
-		}}}
-		commonHttpCase = backend.HttpCases[backend.EmptyJson, *backend.TaskToSend]{RequestsToSend: requestsToTest,
-			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/internal/task",
-			ExpectedHttpCode: http.StatusOK}
-	)
-	testThroughHandler(taskHandler, t, commonHttpCase)
-}
-
-func testTaskGetHandlerEmpty404(t *testing.T) {
-	exprsList = backend.ExpressionListEmptyFabric()
-	var (
-		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*backend.EmptyJson{{}}
-		commonHttpCase    = backend.HttpCases[backend.EmptyJson, *backend.EmptyJson]{RequestsToSend: requestsToTest,
-			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/internal/task",
-			ExpectedHttpCode: http.StatusNotFound}
-	)
-	testThroughHandler(taskHandler, t, commonHttpCase)
-}
-
-func testTaskGetHandler404(t *testing.T) {
-	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
-	})
-	exprsList.ExprFabricAdd([]string{"2", "3", "*"})
-	var (
-		requestsToTest    = []backend.EmptyJson{{}}
-		expectedResponses = []*backend.TaskToSend{{Task: &backend.Task{
-			PairID:        0,
-			Arg1:          2,
-			Arg2:          3,
-			Operation:     "*",
-			OperationTime: 1 * time.Second,
-		}}}
-		requestsToTest2    = []backend.EmptyJson{{}}
-		expectedResponses2 = []*backend.EmptyJson{{}}
-		commonHttpCase     = backend.HttpCases[backend.EmptyJson, *backend.TaskToSend]{RequestsToSend: requestsToTest,
-			ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/internal/task",
-			ExpectedHttpCode: http.StatusOK}
-		commonHttpCase2 = backend.HttpCases[backend.EmptyJson, *backend.EmptyJson]{RequestsToSend: requestsToTest2,
-			ExpectedResponses: expectedResponses2, HttpMethod: "GET", UrlTarget: "/internal/task",
-			ExpectedHttpCode: http.StatusNotFound}
-	)
-	testThroughHandler(taskHandler, t, commonHttpCase)
-	testThroughHandler(taskHandler, t, commonHttpCase2)
-}
-
-func testTaskPostHandler200(t *testing.T) {
-	t.Cleanup(func() {
-		exprsList = backend.ExpressionListEmptyFabric()
-	})
-	exprsList.ExprFabricAdd([]string{"2", "3", "*"})
-	var (
-		requestsToTest    = []*backend.AgentResult{{ID: 0, Result: 6}}
-		expectedResponses = []backend.EmptyJson{{}}
-		commonHttpCase    = backend.HttpCases[*backend.AgentResult, backend.EmptyJson]{RequestsToSend: requestsToTest,
-			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/internal/task",
-			ExpectedHttpCode: http.StatusOK}
-	)
-	stubExpr := exprsList.GetReadyExpr()
-	stubExpr.FabricReadyExprSendTask()
-	stubTask := stubExpr.GetTasksHandler().Get(0)
-	stubTask.ChangeStatus(backend.Sent)
-
-	testThroughHandler(taskHandler, t, commonHttpCase)
-
-	if stubExpr.Result != 6 {
-		t.Errorf("Ожидается result %d по Expression %d, получен %d", 6, stubExpr.ID, stubExpr.Result)
-	}
-}
-
-func testTaskPostHandler404(t *testing.T) {
-	exprsList = backend.ExpressionListEmptyFabric()
-	var (
-		requestsToTest    = []*backend.AgentResult{{ID: 0, Result: 6}}
-		expectedResponses = []backend.EmptyJson{{}}
-		commonHttpCase    = backend.HttpCases[*backend.AgentResult, backend.EmptyJson]{RequestsToSend: requestsToTest,
-			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/internal/task",
-			ExpectedHttpCode: http.StatusNotFound}
-	)
-	testThroughHandler(taskHandler, t, commonHttpCase)
-}
-
-type RandomJson struct {
-	Hey   int `json:"hey"`
-	Issue int `json:"issue"`
-}
-
-func (r *RandomJson) Marshal() (result []byte, err error) {
-	result, err = json.Marshal(&r)
-	return
-}
-
-func testTaskPostHandler422(t *testing.T) {
-	exprsList = backend.ExpressionListEmptyFabric()
-	var (
-		requestsToTest    = []*RandomJson{{Hey: 0, Issue: 6}}
-		expectedResponses = []backend.EmptyJson{{}}
-		commonHttpCase    = backend.HttpCases[*RandomJson, backend.EmptyJson]{RequestsToSend: requestsToTest,
-			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/internal/task",
-			ExpectedHttpCode: http.StatusUnprocessableEntity}
-	)
-	testThroughHandler(taskHandler, t, commonHttpCase)
-}
-
-func TestTaskHandler(t *testing.T) {
-	t.Setenv("TIME_ADDITION_MS", "1s")
-	t.Setenv("TIME_SUBTRACTION_MS", "1s")
-	t.Setenv("TIME_MULTIPLICATIONS_MS", "1s")
-	t.Setenv("TIME_DIVISIONS_MS", "1s")
-
-	t.Run("TestTaskGetHandler200", testTaskGetHandler200)
-	t.Run("TestTaskGetHandlerEmpty404", testTaskGetHandlerEmpty404)
-	t.Run("TestTaskGetHandler404", testTaskGetHandler404)
-	t.Run("TestTaskPostHandler200", testTaskPostHandler200)
-	t.Run("TestTaskPostHandler404", testTaskPostHandler404)
-	//t.Run("TestTaskPostHandler422", testTaskPostHandler422) // TODO
+	exprsList = CallEmptyExpressionListFabric()
+	t.Run("200Code", testExpressionIdHandler200)
+	t.Run("404Code", testExpressionIdHandler404)
 }
 
 func TestPanicMiddlewareGood(t *testing.T) {
@@ -482,4 +461,227 @@ func TestInternalServerErrorHandler(t *testing.T) {
 	if 500 != w.Code {
 		t.Errorf(compareTemplate, "500", strconv.Itoa(w.Code))
 	}
+}
+
+func testGetTaskNotFoundCode(t *testing.T) {
+	var (
+		g      = GetDefaultGrpcServer()
+		result *pb.TaskToSend
+		err    error
+	)
+	t.Cleanup(func() {
+		exprsList = CallEmptyExpressionListFabric()
+	})
+	exprsList = callExprsEmptyListFabric()
+	result, err = g.GetTask(context.TODO(), &pb.Empty{})
+	assert.Equal(t, codes.NotFound, status.Code(err))
+	nilToTaskToSend := (*pb.TaskToSend)(nil) // возвращается не просто nil
+	assert.Equal(t, nilToTaskToSend, result)
+}
+
+func testGetTaskInternalCode(t *testing.T) {
+	var (
+		g      = GetDefaultGrpcServer()
+		result *pb.TaskToSend
+		err    error
+	)
+	t.Cleanup(func() {
+		exprsList = CallEmptyExpressionListFabric()
+	})
+	exprsList = callExprsListStubFabric(testUser.GetId(), backend.ExpressionStub{
+		Id:           0,
+		Status:       backend.Ready,
+		TasksHandler: &backend.TasksHandlerStub{},
+	})
+	result, err = g.GetTask(context.TODO(), &pb.Empty{})
+	assert.Equal(t, codes.Internal, status.Code(err))
+	nilToTaskToSend := (*pb.TaskToSend)(nil) // возвращается не просто nil
+	assert.Equal(t, nilToTaskToSend, result)
+}
+
+func testGetTaskOkCode(t *testing.T) {
+	var (
+		g      = GetDefaultGrpcServer()
+		result *pb.TaskToSend
+		err    error
+	)
+	t.Cleanup(func() {
+		exprsList = CallEmptyExpressionListFabric()
+	})
+	var (
+		expectedTask = backend.CallTaskFabric(0, 2, 4, "+", backend.ReadyToCalc)
+	)
+	exprsList = callExprsListStubFabric(testUser.GetId(), backend.ExpressionStub{
+		Id:           0,
+		Status:       backend.Ready,
+		TasksHandler: &backend.TasksHandlerStub{Buf: map[int32]backend.InternalTask{0: expectedTask}}})
+	result, err = g.GetTask(context.TODO(), &pb.Empty{})
+	assert.Equal(t, codes.OK, status.Code(err))
+	arg1, _ := expectedTask.GetArg1()
+	arg2, _ := expectedTask.GetArg2()
+	var (
+		wrappedExpectedTask = &pb.TaskToSend{
+			PairId:              expectedTask.GetPairId(),
+			Arg1:                arg1,
+			Arg2:                arg2,
+			Operation:           expectedTask.GetOperation(),
+			PermissibleDuration: expectedTask.GetPermissibleDuration().String(),
+		}
+	)
+	assert.EqualExportedValues(t, wrappedExpectedTask, result)
+}
+
+func TestGetTask(t *testing.T) {
+	t.Run("NotFoundCode", testGetTaskNotFoundCode)
+	t.Run("InternalCode", testGetTaskInternalCode)
+	t.Run("OkCode", testGetTaskOkCode)
+}
+
+func testSendTaskNotFoundCode(t *testing.T) {
+	t.Cleanup(func() {
+		exprsList = CallEmptyExpressionListFabric()
+	})
+	var (
+		g      = GetDefaultGrpcServer()
+		toSend = &pb.TaskResult{
+			PairId: 12,
+			Result: 0,
+		}
+		err error
+	)
+	exprsList = callExprsEmptyListFabric()
+	_, err = g.SendTask(context.TODO(), toSend)
+	assert.Equal(t, codes.NotFound, status.Code(err))
+}
+
+func testSendTaskAbortedCode(t *testing.T) {
+	t.Cleanup(func() {
+		exprsList = CallEmptyExpressionListFabric()
+	})
+	var (
+		g      = GetDefaultGrpcServer()
+		toSend = &pb.TaskResult{
+			PairId: 0,
+			Result: 2,
+		}
+		err          error
+		tasksHandler = &backend.TasksHandlerStub{Buf: make(map[int32]backend.InternalTask)}
+	)
+	exprsList = callExprsListStubFabric(testUser.GetId(), backend.ExpressionStub{
+		Id:           0, // pairId 15 = expr id 3 and internal task Id (unused) 3
+		Status:       backend.Ready,
+		Result:       0,
+		TasksHandler: tasksHandler,
+	})
+	_, err = g.SendTask(context.TODO(), toSend)
+	assert.Equal(t, codes.Aborted, status.Code(err))
+}
+
+func testSendTaskOkCode(t *testing.T) {
+	t.Cleanup(func() {
+		exprsList = CallEmptyExpressionListFabric()
+	})
+	var (
+		g              = GetDefaultGrpcServer()
+		expectedResult = int64(15)
+		expectedPairId = int32(0)
+		toSend         = &pb.TaskResult{
+			PairId: expectedPairId,
+			Result: expectedResult,
+		}
+		err          error
+		tasksHandler = &backend.TasksHandlerStub{Buf: map[int32]backend.InternalTask{expectedPairId: backend.CallTaskFabric(
+			expectedPairId, 2, 3, "-", backend.ReadyToCalc)}}
+	)
+	exprsList = callExprsListStubFabric(testUser.GetId(), backend.ExpressionStub{
+		Id:           0,
+		Status:       backend.Ready,
+		Result:       0,
+		TasksHandler: tasksHandler,
+	})
+	_, err = g.SendTask(context.TODO(), toSend)
+	assert.Equal(t, codes.OK, status.Code(err))
+	taskToCheck := tasksHandler.Get(int(expectedPairId))
+	assert.Equal(t, expectedResult, taskToCheck.GetResult())
+}
+
+func TestSendTask(t *testing.T) {
+	t.Run("NotFoundCode", testSendTaskNotFoundCode)
+	t.Run("AbortedCode", testSendTaskAbortedCode)
+	t.Run("OkCode", testSendTaskOkCode)
+}
+
+func testRegisterHandlerNewUser(t *testing.T) {
+	var err error
+	t.Cleanup(func() {
+		err = db.Flush()
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	db = callStubDbFabric()
+	var (
+		requestsToTest    = []*backend.UserStub{{Login: "hhh", Password: "qwertyqwerty"}}
+		expectedResponses = []*backend.EmptyJson{{}}
+		commonHttpCase    = backend.HttpCasesHandler[*backend.UserStub, *backend.EmptyJson]{RequestsToSend: requestsToTest,
+			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/register",
+			ExpectedHttpCode: http.StatusOK}
+	)
+	testThroughHttpHandler(registerHandler, t, commonHttpCase, defaultCmpFunc)
+}
+
+func TestRegisterHandler(t *testing.T) {
+	t.Run("NewUser", testRegisterHandlerNewUser)
+	//	t.Run("RegisteredUser", )
+}
+
+func TestLoginHandler(t *testing.T) {
+	var (
+		unregisteredUser = &backend.UserStub{
+			Login:    "hhh123",
+			Password: "qwertyqwerty",
+		}
+		registeredUserWithCorrectPassword = &backend.UserStub{
+			Login:    "hhh",
+			Password: "qwertyqwerty",
+		}
+		registeredUserWithWrongPassword = &backend.UserStub{
+			Login:    registeredUserWithCorrectPassword.Login,
+			Password: "asdasdsad",
+		}
+	)
+	db = callStubDbWithRegisteredUserFabric(*registeredUserWithCorrectPassword, *registeredUserWithCorrectPassword)
+
+	t.Run("UnregisteredUserLogin", func(t *testing.T) {
+		var (
+			requestsToTest    = []*backend.UserStub{unregisteredUser}
+			expectedResponses = []backend.EmptyJson{{}}
+			commonHttpCase    = backend.HttpCasesHandler[*backend.UserStub, backend.EmptyJson]{RequestsToSend: requestsToTest,
+				ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/login",
+				ExpectedHttpCode: http.StatusUnauthorized}
+		)
+		testThroughHttpHandler(loginHandler, t, commonHttpCase, defaultCmpFunc)
+	})
+	t.Run("RegisteredUserLoginWithWrongPassword", func(t *testing.T) {
+		var (
+			requestsToTest    = []*backend.UserStub{registeredUserWithWrongPassword}
+			expectedResponses = []*backend.EmptyJson{{}}
+			commonHttpCase    = backend.HttpCasesHandler[*backend.UserStub, *backend.EmptyJson]{RequestsToSend: requestsToTest,
+				ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/login",
+				ExpectedHttpCode: http.StatusUnauthorized}
+		)
+		testThroughHttpHandler(loginHandler, t, commonHttpCase, defaultCmpFunc)
+	})
+	t.Run("RegisteredUserLoginWithCorrectPassword", func(t *testing.T) {
+		var (
+			requestsToTest                 = []*backend.UserStub{registeredUserWithCorrectPassword}
+			expectedNonIdempotentInstances = []*userForJwtToken{{ExpectedUser: registeredUserWithCorrectPassword}}
+			commonHttpCase                 = backend.HttpCasesHandler[*backend.UserStub, *userForJwtToken]{RequestsToSend: requestsToTest,
+				ExpectedResponses: expectedNonIdempotentInstances, HttpMethod: "POST", UrlTarget: "/api/v1/login",
+				ExpectedHttpCode: http.StatusOK}
+		)
+		testByStructCompareThroughHttpHandler(loginHandler, t, commonHttpCase)
+	})
+	//t.Run("AuthenticatedUser", func(t *testing.T) {
+	//})
 }
