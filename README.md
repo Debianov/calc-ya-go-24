@@ -1,21 +1,22 @@
-Сервис подсчёта арифметических выражений. Поддерживает операторы +, -, /, *, а также скобочки для приоритизации отдельных 
-частей выражения.
+Сервис подсчёта арифметических выражений. Поддерживает операторы +, -, /, *, а также скобочки для приоритизации \
+отдельных частей выражения.
 
-Разделён на оркестратор и агент. Оркестратор отвечает за приём новых выражений,
-а агент — за их вычисление.
+Проект разделён на оркестратор и агент. Оркестратор отвечает за приём новых выражений и регистрацию пользователей,
+а агент — за математические вычисления.
 
 # Развёртывание
 `git clone https://github.com/Debianov/calc-ya-go-24.git`
 
-В `backend/orchestrator/config.go` в строке `return &http.Server{Addr: "127.0.0.1:8000", Handler: handler}` может быть 
-изменён адрес `Addr` на любой желаемый. Соответствующие изменения также нужно сделать в `backend/agent/config.go`, иначе 
-оркестратор и агент не будут корректно работать.
+## Конфиг-файлы
+
+Конфигурирование оркестратора и агента может быть осуществлён в `backend/orchestrator/config.go` и 
+`backend/agent/config.go`
 
 Для работы программы желательна последняя версия Go 1.24 ([как обновить Go](https://go.dev/doc/install), 
 если в репозиториях пакетных менеджеров ещё нет новой версии). **Работа проекта протестирована на 
 версии 1.24.**
 
-# Переменные среды
+## Переменные среды
 Для изменения стандартных настроек оркестратора можно использовать следующие переменные среды:
 ```
 TIME_ADDITION
@@ -62,54 +63,88 @@ go run github.com/Debianov/calc-ya-go-24/backend/agent
 
 # Использование
 
-## Внешние endpoint-ы
 
+## Получение токена
+Для использования любых доступных endpoint-ов необходимо наличие токена. Токен выдаётся через `/api/v1/login`.
+Требуется регистрация через `/api/v1/register`:
+```shell
+curl -v --location 'localhost:8000/api/v1/register' \
+--header 'Content-Type: application/json' \ 
+--data '{"login": "test", "password": "qwerty"}'
+```
+
+Получить токен:
+```shell
+curl -v --location 'localhost:8000/api/v1/login' \
+--header 'Content-Type: application/json' \ 
+--data '{"login": "test", "password": "qwerty"}'
+```
+Вывод:
+```shell
+{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ..."}
+```
+
+## Подсчёт и выдача результатов
 Запрос на регистрацию нового выражения:
 ```shell
 curl --location 'localhost:8000/api/v1/calculate' \
 --header 'Content-Type: application/json' \
 --data '{
+  "token": "<вставитьТокен>",
   "expression": "2+2*4" 
 }'
+```
+Вывод при статусе 201:
+```shell
+{"id":<int>}
 ```
 
 Запрос на получение списка выражений:
 ```shell
-curl --location 'localhost:8000/api/v1/expressions'
+curl --location 'localhost:8000/api/v1/expressions' \
+--header 'Content-Type: application/json' \
+--data '{
+  "token": "<вставитьТокен>" 
+}'
+```
+Вывод при статусе 200:
+```shell
+{"expressions":[{"id":5,"status":"Выполнено","result":4},{"id":6,"status":"Выполнено","result":4}]}
 ```
 
 Запрос на получение конкретного выражения по id:
 ```shell
-curl --location 'localhost:8000/api/v1/expressions/id'
-```
-
-## Внутренние endpoint-ы
-Используются агентом.
-
-Запрос на получение задачи (GET):
-```shell
-curl --location 'localhost:8000/internal/task'
-```
-
-Запрос на отправку задачи (POST):
-```shell
-curl --location 'localhost:8000/internal/task' \
+curl --location 'localhost:8000/api/v1/expressions/<int>' \
 --header 'Content-Type: application/json' \
 --data '{
-  "id": 0,
-  "result": 10
+  "token": "<вставитьТокен>" 
 }'
 ```
+Вывод при статусе 200:
+```shell
+{"expression":{"id":5,"status":"Выполнено","result":4}}
+```
 
-Ответы возвращаются также в формате json. В случае, если код ответа не 200 и не 201,
-будет возвращена пустая строка.
+# Участие в разработке
 
-# Тестирование
+## Pull Request-ы
+Используйте отдельные ветки и pull request-ы, когда всё готово.
+
+## Тестирование
 Для работы также необходимы экспортированные переменные окружения.
+
+Тесты для оркестратора:
 ```shell
 cd ./backend/orchestrator
 go test
 ```
-
-# Участие в разработке
-Используйте отдельные ветки и pull request-ы, когда всё готово.
+Тесты для агента:
+```shell
+cd ./backend/agent
+go test
+```
+Интеграционные тесты:
+```shell
+cd ./backend
+go test
+```
