@@ -169,3 +169,69 @@ type RequestJsonStub struct {
 func (r *RequestJsonStub) Marshal() (result []byte, err error) {
 	return json.Marshal(r)
 }
+
+type UserStub struct {
+	hashMan        HashMan
+	Login          string `json:"login"`
+	Password       string `json:"password"`
+	Id             int64
+	hashedPassword string
+}
+
+func (u *UserStub) Marshal() (result []byte, err error) {
+	return json.Marshal(u)
+}
+
+func (u *UserStub) GetLogin() string {
+	return u.Login
+}
+
+func (u *UserStub) SetLogin(s string) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (u *UserStub) GetId() int64 {
+	return u.Id
+}
+
+func (u *UserStub) SetId(i int64) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (u *UserStub) GetPassword() string {
+	return u.Password
+}
+
+func (u *UserStub) SetPassword(password string) {
+	u.Password = password
+}
+
+func (u *UserStub) GetHashedPassword() string {
+	return u.hashedPassword
+}
+
+func (u *UserStub) SetHashedPassword(salt string) (err error) {
+	u.hashedPassword, err = u.hashMan.Generate(salt)
+	return
+}
+
+func (u *UserStub) Is(user UserWithPassword) (status bool) {
+	var (
+		err error
+	)
+	if err = u.hashMan.Compare(u.GetHashedPassword(), user.GetPassword()); err != nil {
+		return
+	}
+	status = true
+	return
+}
+
+type JwtTokenJsonWrapperStub struct {
+	Token string `json:"token"`
+}
+
+func (j *JwtTokenJsonWrapperStub) Marshal() (result []byte, err error) {
+	return json.Marshal(j)
+}

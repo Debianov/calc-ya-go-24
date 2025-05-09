@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/Debianov/calc-ya-go-24/backend"
 	"github.com/golang-jwt/jwt/v5"
 	"log"
 	"time"
@@ -10,7 +11,7 @@ import (
 
 const TodoSecretToDefendEnv = "not_under_deploy_not_under_deploy"
 
-func GenerateJwt(user CommonUser) (token string, err error) {
+func GenerateJwt(user backend.CommonUser) (token string, err error) {
 	var currentTime = time.Now()
 	var jwtInstance = jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"login": user.GetLogin(),
@@ -26,8 +27,8 @@ func GenerateJwt(user CommonUser) (token string, err error) {
 	return
 }
 
-func ParseJwt(token string) (user CommonUser, err error) {
-	user = &DbUser{}
+func ParseJwt(token string) (user backend.CommonUser, err error) {
+	user = &backend.DbUser{}
 	var tokenFromString *jwt.Token
 	tokenFromString, err = jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {

@@ -138,7 +138,7 @@ func testByStructCompareThroughHttpHandler[K backend.JsonPayload, V parsedToken]
 			t.Fatal(err)
 		}
 		var (
-			userFromParsedToken   CommonUser
+			userFromParsedToken   backend.CommonUser
 			userFromExpectedToken = casesHandler.ExpectedResponses[ind].GetExpectedUser()
 		)
 		userFromParsedToken, err = ParseJwt(realToken.Token)
@@ -164,10 +164,10 @@ func formExpectedExpressions(exprsInSlices ...[]backend.ExpressionStub) (sortedE
 	return
 }
 
-var testUser = UserStub{
+var testUser = backend.UserStub{
 	Login:    "test",
 	Password: "qwerty",
-	id:       0,
+	Id:       0,
 }
 var token, _ = GenerateJwt(&testUser)
 
@@ -175,6 +175,7 @@ func TestCalcHandler(t *testing.T) {
 	t.Cleanup(func() {
 		exprsList = CallEmptyExpressionListFabric()
 	})
+	exprsList = CallEmptyExpressionListFabric()
 	db = callStubDbWithRegisteredUserFabric(testUser)
 
 	t.Run("201Code", func(t *testing.T) {
@@ -183,7 +184,7 @@ func TestCalcHandler(t *testing.T) {
 				{Token: token, Expression: "4*2+3*5"}}
 			expectedResponses = []*backend.ExpressionJsonStub{{ID: 0}, {ID: 1}}
 			commonHttpCase    = backend.HttpCasesHandler[*backend.RequestJsonStub, *backend.ExpressionJsonStub]{
-				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "POST",
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: http.MethodPost,
 				UrlTarget: "/api/v1/calculate", ExpectedHttpCode: http.StatusCreated}
 		)
 		testThroughHttpHandler(calcHandler, t, commonHttpCase, defaultCmpFunc)
@@ -195,7 +196,7 @@ func TestCalcHandler(t *testing.T) {
 				{Token: token, Expression: "4*()2+3"}}
 			expectedResponses = []backend.EmptyJson{{}, {}, {}, {}}
 			commonHttpCase    = backend.HttpCasesHandler[*backend.RequestJsonStub, backend.EmptyJson]{RequestsToSend: requestsToTest,
-				ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/calculate",
+				ExpectedResponses: expectedResponses, HttpMethod: http.MethodPost, UrlTarget: "/api/v1/calculate",
 				ExpectedHttpCode: http.StatusUnprocessableEntity}
 		)
 		testThroughHttpHandler(calcHandler, t, commonHttpCase, defaultCmpFunc)
@@ -205,7 +206,7 @@ func TestCalcHandler(t *testing.T) {
 			requestsToTest    = []*backend.RequestJsonStub{{Token: token, Expression: "2+2*4"}}
 			expectedResponses = []*backend.EmptyJson{{}}
 			commonHttpCase    = backend.HttpCasesHandler[*backend.RequestJsonStub, *backend.EmptyJson]{RequestsToSend: requestsToTest,
-				ExpectedResponses: expectedResponses, HttpMethod: "GET", UrlTarget: "/api/v1/calculate",
+				ExpectedResponses: expectedResponses, HttpMethod: http.MethodGet, UrlTarget: "/api/v1/calculate",
 				ExpectedHttpCode: http.StatusNotFound}
 		)
 		testThroughHttpHandler(calcHandler, t, commonHttpCase, defaultCmpFunc)
@@ -234,10 +235,10 @@ func testExpressionsHandler200(t *testing.T) {
 		exprsList = callExprsListStubFabric(testUser.GetId(), expectedExpressionsFromList...)
 		expectedExpressions = formExpectedExpressions(expectedExpressionsFromList, expectedExpressionsFromDb)
 		var (
-			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
 			expectedResponses = []*backend.ExpressionsJsonTitleStub{{expectedExpressions}}
-			commonHttpCase    = backend.HttpCasesHandler[*JwtTokenJsonWrapperStub, *backend.ExpressionsJsonTitleStub]{
-				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
+			commonHttpCase    = backend.HttpCasesHandler[*backend.JwtTokenJsonWrapperStub, *backend.ExpressionsJsonTitleStub]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: http.MethodPost,
 				UrlTarget: "/api/v1/expressions", ExpectedHttpCode: http.StatusOK}
 		)
 		testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
@@ -253,10 +254,10 @@ func testExpressionsHandler200(t *testing.T) {
 		)
 		exprsList = callExprsListStubFabric(testUser.GetId(), expectedExpressions...)
 		var (
-			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
 			expectedResponses = []*backend.ExpressionsJsonTitleStub{{expectedExpressions}}
-			commonHttpCase    = backend.HttpCasesHandler[*JwtTokenJsonWrapperStub, *backend.ExpressionsJsonTitleStub]{
-				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
+			commonHttpCase    = backend.HttpCasesHandler[*backend.JwtTokenJsonWrapperStub, *backend.ExpressionsJsonTitleStub]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: http.MethodPost,
 				UrlTarget: "/api/v1/expressions", ExpectedHttpCode: http.StatusOK}
 		)
 		testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
@@ -271,20 +272,20 @@ func testExpressionsHandler200(t *testing.T) {
 		)
 		db.(*DbStub).InsertExprs(testUser.GetId(), expectedExpressions)
 		var (
-			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
 			expectedResponses = []*backend.ExpressionsJsonTitleStub{{expectedExpressions}}
-			commonHttpCase    = backend.HttpCasesHandler[*JwtTokenJsonWrapperStub, *backend.ExpressionsJsonTitleStub]{
-				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
+			commonHttpCase    = backend.HttpCasesHandler[*backend.JwtTokenJsonWrapperStub, *backend.ExpressionsJsonTitleStub]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: http.MethodPost,
 				UrlTarget: "/api/v1/expressions", ExpectedHttpCode: http.StatusOK}
 		)
 		testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
 	})
 	t.Run("EmptyStorages", func(t *testing.T) {
 		var (
-			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
 			expectedResponses = []*backend.ExpressionsJsonTitle{{Expressions: nil}}
-			commonHttpCase    = backend.HttpCasesHandler[*JwtTokenJsonWrapperStub, *backend.ExpressionsJsonTitle]{
-				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
+			commonHttpCase    = backend.HttpCasesHandler[*backend.JwtTokenJsonWrapperStub, *backend.ExpressionsJsonTitle]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: http.MethodPost,
 				UrlTarget: "/api/v1/expressions", ExpectedHttpCode: http.StatusOK}
 		)
 		testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
@@ -292,7 +293,7 @@ func testExpressionsHandler200(t *testing.T) {
 }
 
 func testExpressionsHandler404(t *testing.T) {
-	t.Run("WrongMethod", func(t *testing.T) {
+	t.Run("WrongHttpMethod", func(t *testing.T) {
 		t.Cleanup(func() {
 			exprsList = CallEmptyExpressionListFabric()
 		})
@@ -301,9 +302,11 @@ func testExpressionsHandler404(t *testing.T) {
 		)
 		exprsList = callExprsListStubFabric(testUser.GetId(), expressionToList...)
 		var (
-			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
 			expectedResponses = []*backend.EmptyJson{{}}
-			commonHttpCase    = backend.HttpCasesHandler[*JwtTokenJsonWrapperStub, *backend.EmptyJson]{RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/expressions",
+			commonHttpCase    = backend.HttpCasesHandler[*backend.JwtTokenJsonWrapperStub, *backend.EmptyJson]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: http.MethodGet,
+				UrlTarget:        "/api/v1/expressions",
 				ExpectedHttpCode: http.StatusNotFound}
 		)
 		testThroughHttpHandler(expressionsHandler, t, commonHttpCase, defaultCmpFunc)
@@ -326,11 +329,11 @@ func testExpressionIdHandler200(t *testing.T) {
 		)
 		db.(*DbStub).InsertExprs(testUser.GetId(), expectedExpressions)
 		var (
-			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
 			expectedResponses = []*backend.ExpressionJsonTitleStub{{expectedExpressions[0]}}
-			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*JwtTokenJsonWrapperStub,
+			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*backend.JwtTokenJsonWrapperStub,
 				*backend.ExpressionJsonTitleStub]{RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses,
-				HttpMethod: "GET", UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
+				HttpMethod: http.MethodPost, UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
 				ExpectedHttpCode: http.StatusOK}
 		)
 		testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
@@ -344,11 +347,11 @@ func testExpressionIdHandler200(t *testing.T) {
 		)
 		exprsList = callExprsListStubFabric(testUser.GetId(), expectedExpressions...)
 		var (
-			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
 			expectedResponses = []*backend.ExpressionJsonTitleStub{{expectedExpressions[0]}}
-			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*JwtTokenJsonWrapperStub,
+			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*backend.JwtTokenJsonWrapperStub,
 				*backend.ExpressionJsonTitleStub]{RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses,
-				HttpMethod: "GET", UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
+				HttpMethod: http.MethodPost, UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
 				ExpectedHttpCode: http.StatusOK}
 		)
 		testThroughServeMux(expressionIdHandler, t, serverMuxHttpCase, defaultCmpFunc)
@@ -365,10 +368,10 @@ func testExpressionIdHandler404(t *testing.T) {
 		)
 		exprsList = callExprsListStubFabric(testUser.GetId(), expressionToList...)
 		var (
-			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
 			expectedResponses = []*backend.EmptyJson{{}}
-			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*JwtTokenJsonWrapperStub, *backend.EmptyJson]{
-				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
+			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*backend.JwtTokenJsonWrapperStub, *backend.EmptyJson]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: http.MethodPost,
 				UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/1",
 				ExpectedHttpCode: http.StatusNotFound}
 		)
@@ -383,10 +386,10 @@ func testExpressionIdHandler404(t *testing.T) {
 		})
 		exprsList = callExprsListStubFabric(testUser.GetId(), expectedExpressions...)
 		var (
-			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
 			expectedResponses = []*backend.EmptyJson{{}}
-			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*JwtTokenJsonWrapperStub, *backend.EmptyJson]{
-				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "POST",
+			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*backend.JwtTokenJsonWrapperStub, *backend.EmptyJson]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: http.MethodGet,
 				UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
 				ExpectedHttpCode: http.StatusNotFound}
 		)
@@ -394,10 +397,10 @@ func testExpressionIdHandler404(t *testing.T) {
 	})
 	t.Run("EmptyStorages", func(t *testing.T) {
 		var (
-			requestsToTest    = []*JwtTokenJsonWrapperStub{{Token: token}}
+			requestsToTest    = []*backend.JwtTokenJsonWrapperStub{{Token: token}}
 			expectedResponses = []*backend.EmptyJson{{}}
-			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*JwtTokenJsonWrapperStub, *backend.EmptyJson]{
-				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: "GET",
+			serverMuxHttpCase = backend.ServerMuxHttpCasesHandler[*backend.JwtTokenJsonWrapperStub, *backend.EmptyJson]{
+				RequestsToSend: requestsToTest, ExpectedResponses: expectedResponses, HttpMethod: http.MethodPost,
 				UrlTemplate: "/api/v1/expressions/{id}", UrlTarget: "/api/v1/expressions/0",
 				ExpectedHttpCode: http.StatusNotFound}
 		)
@@ -618,9 +621,9 @@ func testRegisterHandlerNewUser(t *testing.T) {
 	})
 	db = callStubDbFabric()
 	var (
-		requestsToTest    = []*UserStub{{Login: "hhh", Password: "qwertyqwerty"}}
+		requestsToTest    = []*backend.UserStub{{Login: "hhh", Password: "qwertyqwerty"}}
 		expectedResponses = []*backend.EmptyJson{{}}
-		commonHttpCase    = backend.HttpCasesHandler[*UserStub, *backend.EmptyJson]{RequestsToSend: requestsToTest,
+		commonHttpCase    = backend.HttpCasesHandler[*backend.UserStub, *backend.EmptyJson]{RequestsToSend: requestsToTest,
 			ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/register",
 			ExpectedHttpCode: http.StatusOK}
 	)
@@ -634,15 +637,15 @@ func TestRegisterHandler(t *testing.T) {
 
 func TestLoginHandler(t *testing.T) {
 	var (
-		unregisteredUser = &UserStub{
+		unregisteredUser = &backend.UserStub{
 			Login:    "hhh123",
 			Password: "qwertyqwerty",
 		}
-		registeredUserWithCorrectPassword = &UserStub{
+		registeredUserWithCorrectPassword = &backend.UserStub{
 			Login:    "hhh",
 			Password: "qwertyqwerty",
 		}
-		registeredUserWithWrongPassword = &UserStub{
+		registeredUserWithWrongPassword = &backend.UserStub{
 			Login:    registeredUserWithCorrectPassword.Login,
 			Password: "asdasdsad",
 		}
@@ -651,9 +654,9 @@ func TestLoginHandler(t *testing.T) {
 
 	t.Run("UnregisteredUserLogin", func(t *testing.T) {
 		var (
-			requestsToTest    = []*UserStub{unregisteredUser}
+			requestsToTest    = []*backend.UserStub{unregisteredUser}
 			expectedResponses = []backend.EmptyJson{{}}
-			commonHttpCase    = backend.HttpCasesHandler[*UserStub, backend.EmptyJson]{RequestsToSend: requestsToTest,
+			commonHttpCase    = backend.HttpCasesHandler[*backend.UserStub, backend.EmptyJson]{RequestsToSend: requestsToTest,
 				ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/login",
 				ExpectedHttpCode: http.StatusUnauthorized}
 		)
@@ -661,9 +664,9 @@ func TestLoginHandler(t *testing.T) {
 	})
 	t.Run("RegisteredUserLoginWithWrongPassword", func(t *testing.T) {
 		var (
-			requestsToTest    = []*UserStub{registeredUserWithWrongPassword}
+			requestsToTest    = []*backend.UserStub{registeredUserWithWrongPassword}
 			expectedResponses = []*backend.EmptyJson{{}}
-			commonHttpCase    = backend.HttpCasesHandler[*UserStub, *backend.EmptyJson]{RequestsToSend: requestsToTest,
+			commonHttpCase    = backend.HttpCasesHandler[*backend.UserStub, *backend.EmptyJson]{RequestsToSend: requestsToTest,
 				ExpectedResponses: expectedResponses, HttpMethod: "POST", UrlTarget: "/api/v1/login",
 				ExpectedHttpCode: http.StatusUnauthorized}
 		)
@@ -671,9 +674,9 @@ func TestLoginHandler(t *testing.T) {
 	})
 	t.Run("RegisteredUserLoginWithCorrectPassword", func(t *testing.T) {
 		var (
-			requestsToTest                 = []*UserStub{registeredUserWithCorrectPassword}
+			requestsToTest                 = []*backend.UserStub{registeredUserWithCorrectPassword}
 			expectedNonIdempotentInstances = []*userForJwtToken{{ExpectedUser: registeredUserWithCorrectPassword}}
-			commonHttpCase                 = backend.HttpCasesHandler[*UserStub, *userForJwtToken]{RequestsToSend: requestsToTest,
+			commonHttpCase                 = backend.HttpCasesHandler[*backend.UserStub, *userForJwtToken]{RequestsToSend: requestsToTest,
 				ExpectedResponses: expectedNonIdempotentInstances, HttpMethod: "POST", UrlTarget: "/api/v1/login",
 				ExpectedHttpCode: http.StatusOK}
 		)

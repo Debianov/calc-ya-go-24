@@ -18,8 +18,9 @@ import (
 )
 
 var (
-	db        DbWrapper             = CallDbFabric()
-	exprsList CommonExpressionsList = CallEmptyExpressionListFabric()
+	db            DbWrapper             = CallDbFabric()
+	lastExprId, _                       = db.GetLastExprId()
+	exprsList     CommonExpressionsList = CallExpressionListWithLastIdFabric(lastExprId + 1)
 )
 
 func registerHandler(w http.ResponseWriter, r *http.Request) {
@@ -33,8 +34,8 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	var (
 		reqBuf   []byte
-		jsonUser = CallJsonUserFabric()
-		dbUser   *DbUser
+		jsonUser = backend.CallJsonUserFabric()
+		dbUser   *backend.DbUser
 		err      error
 	)
 	reqBuf, err = io.ReadAll(r.Body)
@@ -45,7 +46,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Panic(err)
 	}
-	dbUser, err = wrapIntoDbUser(jsonUser)
+	dbUser, err = backend.WrapIntoDbUser(jsonUser)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -72,10 +73,10 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	var (
 		reqBuf   []byte
-		jsonUser *JsonUser
+		jsonUser *backend.JsonUser
 		err      error
 	)
-	jsonUser = &JsonUser{}
+	jsonUser = &backend.JsonUser{}
 	reqBuf, err = io.ReadAll(r.Body)
 	if err != nil {
 		log.Panic(err)
@@ -85,7 +86,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		log.Panic(err)
 	}
 	var (
-		userFromDb UserWithHashedPassword
+		userFromDb backend.UserWithHashedPassword
 	)
 	userFromDb, err = db.SelectUser(jsonUser.GetLogin())
 	if err != nil {
@@ -130,7 +131,7 @@ func calcHandler(w http.ResponseWriter, r *http.Request) {
 		buf           []byte
 		requestStruct RequestJson
 		reader        io.ReadCloser
-		user          CommonUser
+		user          backend.CommonUser
 	)
 	reader = r.Body
 	buf, err = io.ReadAll(reader)
@@ -163,7 +164,7 @@ func calcHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func parseToken(r *http.Request) (user CommonUser, err error) {
+func parseToken(r *http.Request) (user backend.CommonUser, err error) {
 	var (
 		tokenBuf []byte
 		jwtToken JwtTokenJsonWrapper
@@ -184,13 +185,13 @@ func parseToken(r *http.Request) (user CommonUser, err error) {
 }
 
 func expressionsHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	var (
 		err  error
-		user CommonUser
+		user backend.CommonUser
 	)
 	user, err = parseToken(r)
 	if err != nil {
@@ -230,13 +231,13 @@ func expressionsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func expressionIdHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	var (
 		err   error
-		user  CommonUser
+		user  backend.CommonUser
 		expr  backend.ShortExpression
 		exist bool
 	)

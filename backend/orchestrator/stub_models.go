@@ -97,8 +97,12 @@ func callExprsEmptyListFabric() (result *ExpressionsListStub) {
 
 type DbStub struct {
 	lastId int64
-	users  map[string]UserWithHashedPassword
+	users  map[string]backend.UserWithHashedPassword
 	exprs  map[int64][]backend.ExpressionStub
+}
+
+func (s *DbStub) GetLastExprId() (int, error) {
+	return 0, nil
 }
 
 func (s *DbStub) InsertExpr(expr backend.CommonExpression) (err error) {
@@ -106,13 +110,13 @@ func (s *DbStub) InsertExpr(expr backend.CommonExpression) (err error) {
 	panic("implement me")
 }
 
-func (s *DbStub) InsertUser(user UserWithHashedPassword) (lastId int64, err error) {
+func (s *DbStub) InsertUser(user backend.UserWithHashedPassword) (lastId int64, err error) {
 	s.users[user.GetLogin()] = user
 	lastId++
 	return lastId, nil
 }
 
-func (s *DbStub) SelectUser(login string) (user UserWithHashedPassword, err error) {
+func (s *DbStub) SelectUser(login string) (user backend.UserWithHashedPassword, err error) {
 	v, ok := s.users[login]
 	if !ok {
 		err = errors.New("элемент не найден")
@@ -140,7 +144,7 @@ func (s *DbStub) SelectExpr(userOwnerId int64, exprId int) (expr backend.ShortEx
 }
 
 func (s *DbStub) Flush() (err error) {
-	s.users = make(map[string]UserWithHashedPassword)
+	s.users = make(map[string]backend.UserWithHashedPassword)
 	s.exprs = make(map[int64][]backend.ExpressionStub)
 	return
 }
@@ -159,12 +163,12 @@ func (s *DbStub) Close() (err error) {
 }
 
 func callStubDbFabric() *DbStub {
-	return &DbStub{users: make(map[string]UserWithHashedPassword), exprs: make(map[int64][]backend.ExpressionStub)}
+	return &DbStub{users: make(map[string]backend.UserWithHashedPassword), exprs: make(map[int64][]backend.ExpressionStub)}
 }
 
-func callStubDbWithRegisteredUserFabric(users ...UserStub) *DbStub {
+func callStubDbWithRegisteredUserFabric(users ...backend.UserStub) *DbStub {
 	var (
-		usersToStub = make(map[string]UserWithHashedPassword)
+		usersToStub = make(map[string]backend.UserWithHashedPassword)
 		exprs       = make(map[int64][]backend.ExpressionStub)
 		err         error
 	)
@@ -178,85 +182,19 @@ func callStubDbWithRegisteredUserFabric(users ...UserStub) *DbStub {
 	return &DbStub{users: usersToStub, exprs: exprs}
 }
 
-type UserStub struct {
-	hashMan        backend.HashMan
-	Login          string `json:"login"`
-	Password       string `json:"password"`
-	hashedPassword string
-	id             int64
-}
-
-func (u *UserStub) Marshal() (result []byte, err error) {
-	return json.Marshal(u)
-}
-
-func (u *UserStub) GetLogin() string {
-	return u.Login
-}
-
-func (u *UserStub) SetLogin(s string) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (u *UserStub) GetId() int64 {
-	return u.id
-}
-
-func (u *UserStub) SetId(i int64) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (u *UserStub) GetPassword() string {
-	return u.Password
-}
-
-func (u *UserStub) SetPassword(password string) {
-	u.Password = password
-}
-
-func (u *UserStub) GetHashedPassword() string {
-	return u.hashedPassword
-}
-
-func (u *UserStub) SetHashedPassword(salt string) (err error) {
-	u.hashedPassword, err = u.hashMan.Generate(salt)
-	return
-}
-
-func (u *UserStub) Is(user UserWithPassword) (status bool) {
-	var (
-		err error
-	)
-	if err = u.hashMan.Compare(u.GetHashedPassword(), user.GetPassword()); err != nil {
-		return
-	}
-	status = true
-	return
-}
-
 type parsedToken interface {
 	backend.JsonPayload
-	GetExpectedUser() CommonUser
+	GetExpectedUser() backend.CommonUser
 }
 
 type userForJwtToken struct {
-	ExpectedUser CommonUser
+	ExpectedUser backend.CommonUser
 }
 
 func (j *userForJwtToken) Marshal() (result []byte, err error) {
 	return json.Marshal(j)
 }
 
-func (j *userForJwtToken) GetExpectedUser() CommonUser {
+func (j *userForJwtToken) GetExpectedUser() backend.CommonUser {
 	return j.ExpectedUser
-}
-
-type JwtTokenJsonWrapperStub struct {
-	Token string `json:"token"`
-}
-
-func (j *JwtTokenJsonWrapperStub) Marshal() (result []byte, err error) {
-	return json.Marshal(j)
 }

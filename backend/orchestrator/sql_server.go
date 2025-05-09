@@ -8,12 +8,13 @@ import (
 )
 
 type DbWrapper interface {
-	InsertUser(user UserWithHashedPassword) (lastId int64, err error)
+	InsertUser(user backend.UserWithHashedPassword) (lastId int64, err error)
 	InsertExpr(expr backend.CommonExpression) (err error)
-	SelectUser(login string) (user UserWithHashedPassword, err error)
+	SelectUser(login string) (user backend.UserWithHashedPassword, err error)
 	SelectAllExprs(userOwnerId int64) (exprs []backend.ShortExpression, err error)
 	SelectExpr(userOwnerId int64, exprId int) (expr backend.ShortExpression, err error)
 	Flush() (err error)
+	GetLastExprId() (int, error)
 	Close() (err error)
 }
 
@@ -22,7 +23,7 @@ type Db struct {
 	innerDb *sql.DB
 }
 
-func (d *Db) InsertUser(user UserWithHashedPassword) (lastId int64, err error) {
+func (d *Db) InsertUser(user backend.UserWithHashedPassword) (lastId int64, err error) {
 	var (
 		query = `
 	INSERT INTO users (login, password) values ($1, $2)
@@ -40,7 +41,7 @@ func (d *Db) InsertUser(user UserWithHashedPassword) (lastId int64, err error) {
 func (d *Db) InsertExpr(expr backend.CommonExpression) (err error) {
 	var (
 		query = `
-	INSERT INTO exprs (exprId, ownerId, status, result) values ($1, $2, $3, $4)
+	INSERT INTO exprs (exprId, ownerId, status, _result) values ($1, $2, $3, $4)
 	`
 	)
 	_, err = d.innerDb.ExecContext(d.ctx, query, expr.GetId(), expr.GetOwnerId(), expr.GetStatus(), expr.GetResult())
@@ -50,15 +51,17 @@ func (d *Db) InsertExpr(expr backend.CommonExpression) (err error) {
 	return
 }
 
-func (d *Db) SelectUser(login string) (resultedUser UserWithHashedPassword, err error) {
+func (d *Db) SelectUser(login string) (resultedUser backend.UserWithHashedPassword, err error) {
 	var (
 		query = `
 	SELECT id, login, password FROM users WHERE login=$1
 	`
-		user = &DbUser{}
+		userId             int64
+		userLogin          string
+		userHashedPassword string
 	)
-	err = d.innerDb.QueryRowContext(d.ctx, query, login).Scan(&user.id, &user.login, &user.hashedPassword)
-	resultedUser = UserWithHashedPassword(user)
+	err = d.innerDb.QueryRowContext(d.ctx, query, login).Scan(&userId, &userLogin, &userHashedPassword)
+	resultedUser = backend.CallDbUserFabric(userId, userLogin, userHashedPassword)
 	return
 }
 
@@ -100,6 +103,16 @@ func (d *Db) SelectExpr(userOwnerId int64, exprId int) (expr backend.ShortExpres
 	return
 }
 
+func (d *Db) GetLastExprId() (result int, err error) {
+	var (
+		query = `
+	SELECT exprId FROM exprs ORDER BY exprId DESC LIMIT 1;
+	`
+	)
+	err = d.innerDb.QueryRowContext(d.ctx, query).Scan(&result)
+	return
+}
+
 func (d *Db) Flush() (err error) {
 	var (
 		query = `
@@ -132,24 +145,6 @@ func CallDbFabric() *Db {
 	return &Db{ctx: ctx, innerDb: innerDb}
 }
 
-func CallTestDbWithUserFabric() (instanceToReturn *Db) {
-	var (
-		innerDb = GetTestSqlServer()
-		ctx     = context.TODO()
-		err     error
-	)
-	err = innerDb.PingContext(ctx)
-	if err != nil {
-		return nil
-	}
-	err = createBaseTables(ctx, innerDb)
-	if err != nil {
-		return nil
-	}
-	instanceToReturn = &Db{ctx: ctx, innerDb: innerDb}
-	return
-}
-
 func createBaseTables(ctx context.Context, db *sql.DB) (err error) {
 	const usersTable = `
 	CREATE TABLE IF NOT EXISTS users(
@@ -160,7 +155,7 @@ func createBaseTables(ctx context.Context, db *sql.DB) (err error) {
 	CREATE TABLE IF NOT EXISTS exprs(
 	    exprId INTEGER PRIMARY KEY,
 	    ownerId INTEGER,
-	    status INTEGER,
+	    status TEXT,
 		_result INTEGER,
 		FOREIGN KEY (ownerId) REFERENCES users (id)
 	);

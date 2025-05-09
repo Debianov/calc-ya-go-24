@@ -12,33 +12,62 @@ import (
 	"time"
 )
 
-const DEFAULT_HTTP_SERVER_URL = "http://127.0.0.1:8000"
+const DefaultHttpServerUrl = "http://127.0.0.1:8000"
 
-type requestToCalc struct {
-	Expression string `json:"expression"`
+func loginUser(t *testing.T, creds CommonUser) string {
+	var (
+		reqBuf  []byte
+		resp    *http.Response
+		respBuf []byte
+		token   JwtTokenJsonWrapperStub
+		err     error
+	)
+	reqBuf, err = json.Marshal(&creds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err = http.Post(DefaultHttpServerUrl+"/api/v1/login", "application/json", bytes.NewReader(reqBuf))
+	if err != nil {
+		t.Fatal(err)
+	}
+	respBuf, err = io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(respBuf, &token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return token.Token
 }
 
-func (r *requestToCalc) Marshal() (result []byte, err error) {
-	return json.Marshal(r)
-}
+var (
+	registeredUser CommonUser = &UserStub{
+		Login:    "test",
+		Password: "qwerty",
+		Id:       0,
+	}
+)
 
 func checkExpressions(t *testing.T) {
+	var token = loginUser(t, registeredUser)
 	var (
-		requestsToCalc        = []*requestToCalc{{"2+2*4"}, {"32+(4*2)/4"}, {"2*3+4*10"}}
+		requestsToCalc = []*RequestJsonStub{{Token: token, Expression: "2+2*4"}, {Token: token,
+			Expression: "32+(4*2)/4"}, {Token: token, Expression: "2*3+4*10"}}
 		realCalcResponses     []IdHolder
 		expectedCalcResponses = []IdHolder{{0}, {1}, {2}}
 	)
-	realCalcResponses = callCalcApi[*requestToCalc](t, requestsToCalc)
+	realCalcResponses = callCalcApi[*RequestJsonStub](t, requestsToCalc)
 	assert.ElementsMatch(t, expectedCalcResponses, realCalcResponses)
-
 	var (
+		requestsToExprs        = JwtTokenJsonWrapperStub{Token: token}
 		realExprsResponses     []ExpressionStub
 		expectedExprsResponses = []ExpressionStub{{Id: 0, Status: Completed, Result: 10},
 			{Id: 1, Status: Completed, Result: 34},
 			{Id: 2, Status: Completed, Result: 46}}
 	)
 	time.Sleep(1 * time.Second) // примерное время на передачу туда-обратно и обработку
-	realExprsResponses = callExpressionsApi(t, len(expectedExprsResponses))
+	realExprsResponses = callExpressionsApi(t, &requestsToExprs)
 	assert.ElementsMatch(t, expectedExprsResponses, realExprsResponses)
 }
 
@@ -63,7 +92,7 @@ func callCalcApi[T JsonPayload](t *testing.T, requestsToCalc []T) (result []IdHo
 		if err != nil {
 			t.Fatal(err)
 		}
-		resp, err = http.Post(DEFAULT_HTTP_SERVER_URL+"/api/v1/calculate", "application/json",
+		resp, err = http.Post(DefaultHttpServerUrl+"/api/v1/calculate", "application/json",
 			bytes.NewReader(jsonBuf))
 		respBuf, err = io.ReadAll(resp.Body)
 		if err != nil {
@@ -78,14 +107,23 @@ func callCalcApi[T JsonPayload](t *testing.T, requestsToCalc []T) (result []IdHo
 	return
 }
 
-func callExpressionsApi(t *testing.T, entriesLen int) (result []ExpressionStub) {
+func callExpressionsApi(t *testing.T, requestsToExprs JsonPayload) (result []ExpressionStub) {
 	var (
 		err         error
+		reqBuf      []byte
 		resp        *http.Response
 		respBuf     []byte
-		resultEntry = ExpressionsJsonTitleStub{make([]ExpressionStub, entriesLen)}
+		resultEntry = ExpressionsJsonTitleStub{make([]ExpressionStub, 0)}
 	)
-	resp, err = http.Get(DEFAULT_HTTP_SERVER_URL + "/api/v1/expressions")
+	reqBuf, err = requestsToExprs.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err = http.Post(DefaultHttpServerUrl+"/api/v1/expressions", "application/json",
+		bytes.NewReader(reqBuf))
+	if err != nil {
+		t.Fatal(err)
+	}
 	respBuf, err = io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
@@ -98,6 +136,19 @@ func callExpressionsApi(t *testing.T, entriesLen int) (result []ExpressionStub) 
 	return
 }
 
+func checkStateSaving(t *testing.T) {
+	var token = loginUser(t, registeredUser)
+	var (
+		requestsToExprs        = JwtTokenJsonWrapperStub{Token: token}
+		realExprsResponses     []ExpressionStub
+		expectedExprsResponses = []ExpressionStub{{Id: 0, Status: Completed, Result: 10},
+			{Id: 1, Status: Completed, Result: 34},
+			{Id: 2, Status: Completed, Result: 46}}
+	)
+	realExprsResponses = callExpressionsApi(t, &requestsToExprs)
+	assert.ElementsMatch(t, expectedExprsResponses, realExprsResponses)
+}
+
 func TestIntegration(t *testing.T) {
 	var (
 		err          error
@@ -107,9 +158,15 @@ func TestIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer stopServices()
 	t.Run("checkExpressions", checkExpressions)
-	//t.Run("checkStatusSaving", checkStatusSaving)
+	stopServices()
+
+	stopServices, err = prepareServices()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stopServices()
+	t.Run("checkStateSaving", checkStateSaving)
 }
 
 func prepareServices() (stopFn func(), err error) {
@@ -134,8 +191,6 @@ func prepareServices() (stopFn func(), err error) {
 	}
 	time.Sleep(3 * time.Second) // процессы не успевают подняться
 	// TODO:
-	// registerUserInOrchestrator
-	// getTokenFromOrchestrator
 	return
 }
 
